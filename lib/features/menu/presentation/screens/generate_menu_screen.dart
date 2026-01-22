@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/services/ai_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../family/data/repositories/family_repository.dart';
+import '../../../shopping/data/repositories/shopping_list_repository.dart';
 import '../providers/menu_provider.dart';
 
 class GenerateMenuScreen extends ConsumerWidget {
@@ -385,7 +386,12 @@ class GenerateMenuScreen extends ConsumerWidget {
               Expanded(
                 child: ElevatedButton(
                   onPressed: () async {
+                    final familyId = ref.read(currentFamilyProvider)?.id;
                     await notifier.saveMenuPlan();
+                    // 刷新购物清单 Provider，确保购物清单页面能看到新数据
+                    if (familyId != null) {
+                      ref.invalidate(familyShoppingListsProvider(familyId));
+                    }
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(

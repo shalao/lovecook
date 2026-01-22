@@ -7,6 +7,7 @@ import '../../../../app/router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../family/data/repositories/family_repository.dart';
 import '../../../inventory/data/models/ingredient_model.dart';
+import '../../../inventory/data/models/ingredient_category_map.dart';
 import '../../../inventory/presentation/providers/inventory_provider.dart';
 import '../../data/models/shopping_list_model.dart';
 import '../../data/repositories/shopping_list_repository.dart';
@@ -108,6 +109,9 @@ class _ShoppingListTab extends ConsumerWidget {
             },
           ),
         ),
+        // 底部入库按钮
+        if (latestList.purchasedCount > 0)
+          _buildAddToInventoryBar(context, ref, latestList),
       ],
     );
   }
@@ -184,6 +188,244 @@ class _ShoppingListTab extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// 底部入库按钮栏
+  Widget _buildAddToInventoryBar(
+    BuildContext context,
+    WidgetRef ref,
+    ShoppingListModel list,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final purchasedItems = list.items.where((item) => item.purchased).toList();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(isDark ? 40 : 13),
+            blurRadius: 4,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.inventory_2_outlined,
+            color: AppColors.primary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '${purchasedItems.length} 项已购食材可入库',
+              style: TextStyle(
+                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
+              ),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => _showAddToInventoryDialog(context, ref, purchasedItems),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.add_home, size: 18),
+            label: const Text('入库'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 显示入库确认对话框
+  void _showAddToInventoryDialog(
+    BuildContext context,
+    WidgetRef ref,
+    List<ShoppingItemModel> purchasedItems,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('添加到家中库存'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '以下 ${purchasedItems.length} 项已购食材将添加到库存：',
+                style: TextStyle(
+                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 300),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: purchasedItems.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final item = purchasedItems[index];
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        _getCategoryIcon(item.category ?? '其他'),
+                        color: AppColors.primary,
+                        size: 20,
+                      ),
+                      title: Text(item.name),
+                      trailing: Text(
+                        item.quantityFormatted,
+                        style: TextStyle(
+                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await _addToInventory(context, ref, purchasedItems);
+            },
+            child: const Text('确认入库'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 将购物项添加到库存
+  Future<void> _addToInventory(
+    BuildContext context,
+    WidgetRef ref,
+    List<ShoppingItemModel> items,
+  ) async {
+    // 显示加载对话框
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Text('正在添加到库存...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final notifier = ref.read(inventoryProvider.notifier);
+      int successCount = 0;
+
+      for (final item in items) {
+        // 转换购物项为食材模型
+        final ingredient = IngredientModel.create(
+          familyId: familyId,
+          name: item.name,
+          category: item.category,
+          quantity: item.quantity,
+          unit: item.unit,
+          source: 'shopping',
+          // 根据类别推荐保质期
+          expiryDate: _getDefaultExpiryDate(item.category ?? '其他'),
+        );
+
+        await notifier.addIngredient(ingredient);
+        successCount++;
+      }
+
+      if (context.mounted) {
+        Navigator.pop(context); // 关闭加载对话框
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('成功将 $successCount 项食材添加到库存'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // 关闭加载对话框
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('添加失败: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  /// 根据类别获取默认保质期
+  DateTime? _getDefaultExpiryDate(String category) {
+    final now = DateTime.now();
+    switch (category) {
+      case '蔬菜':
+        return now.add(const Duration(days: 5));
+      case '水果':
+        return now.add(const Duration(days: 7));
+      case '肉类':
+      case '海鲜':
+        return now.add(const Duration(days: 3));
+      case '蛋奶':
+        return now.add(const Duration(days: 14));
+      case '豆制品':
+        return now.add(const Duration(days: 5));
+      case '主食':
+        return now.add(const Duration(days: 30));
+      case '调味料':
+        return now.add(const Duration(days: 180));
+      case '干货':
+        return now.add(const Duration(days: 90));
+      default:
+        return now.add(const Duration(days: 7));
+    }
+  }
+
+  IconData _getCategoryIcon(String category) {
+    switch (category) {
+      case '蔬菜':
+        return Icons.grass;
+      case '水果':
+        return Icons.apple;
+      case '肉类':
+        return Icons.set_meal;
+      case '海鲜':
+        return Icons.waves;
+      case '蛋奶':
+        return Icons.egg;
+      case '豆制品':
+        return Icons.grain;
+      case '主食':
+        return Icons.rice_bowl;
+      case '调味料':
+        return Icons.water_drop;
+      case '干货':
+        return Icons.inventory_2;
+      default:
+        return Icons.shopping_basket;
+    }
   }
 
   void _copyToClipboard(BuildContext context, ShoppingListModel list) {
