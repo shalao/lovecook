@@ -77,13 +77,14 @@ class FamilyMemberModelAdapter extends TypeAdapter<FamilyMemberModel> {
       allergies: (fields[5] as List).cast<String>(),
       dislikes: (fields[6] as List).cast<String>(),
       favorites: (fields[7] as List).cast<String>(),
+      notes: fields[8] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, FamilyMemberModel obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -99,7 +100,9 @@ class FamilyMemberModelAdapter extends TypeAdapter<FamilyMemberModel> {
       ..writeByte(6)
       ..write(obj.dislikes)
       ..writeByte(7)
-      ..write(obj.favorites);
+      ..write(obj.favorites)
+      ..writeByte(8)
+      ..write(obj.notes);
   }
 
   @override

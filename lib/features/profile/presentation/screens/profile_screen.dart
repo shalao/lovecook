@@ -44,12 +44,31 @@ class ProfileScreen extends ConsumerWidget {
 
           _buildSection(
             context,
-            title: '历史记录',
+            title: '记录',
             children: [
+              _buildListTile(
+                icon: Icons.calendar_month,
+                title: '用餐日历',
+                subtitle: '查看和评价每日用餐',
+                onTap: () => context.push(AppRoutes.mealCalendar),
+              ),
+              const Divider(height: 1, indent: 56),
               _buildListTile(
                 icon: Icons.history,
                 title: '菜单历史',
                 onTap: () => context.push(AppRoutes.menu),
+              ),
+              const Divider(height: 1, indent: 56),
+              _buildListTile(
+                icon: Icons.bookmark,
+                title: '我的收藏',
+                onTap: () => context.push(AppRoutes.favorites),
+              ),
+              const Divider(height: 1, indent: 56),
+              _buildListTile(
+                icon: Icons.menu_book,
+                title: '菜谱库',
+                onTap: () => context.push(AppRoutes.recipes),
               ),
             ],
           ),
@@ -177,6 +196,7 @@ class ProfileScreen extends ConsumerWidget {
     required String title,
     required List<Widget> children,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -187,7 +207,7 @@ class ProfileScreen extends ConsumerWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
+              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
               letterSpacing: 0.5,
             ),
           ),

@@ -196,6 +196,57 @@ class AIService {
     }
   }
 
+  /// 智能识别食材类别
+  /// 当本地映射表无法匹配时，使用 AI 进行分类
+  Future<String?> classifyIngredient(String ingredientName) async {
+    if (!config.isConfigured) {
+      return null; // API 未配置时静默返回 null
+    }
+
+    if (ingredientName.isEmpty) {
+      return null;
+    }
+
+    try {
+      final response = await _dio.post('/chat/completions', data: {
+        'model': config.model,
+        'max_tokens': 50,
+        'temperature': 0.1, // 低温度，确保结果稳定
+        'messages': [
+          {
+            'role': 'system',
+            'content': '''你是食材分类助手。根据食材名称返回其类别。
+类别只能是以下之一：蔬菜、水果、肉类、海鲜、蛋奶、豆制品、主食、调味料、干货、饮品、零食、其他
+只返回类别名称，不要返回任何其他内容。'''
+          },
+          {
+            'role': 'user',
+            'content': ingredientName,
+          },
+        ],
+      });
+
+      final content = response.data['choices'][0]['message']['content'] as String;
+      final category = content.trim();
+
+      // 验证返回的类别是否有效
+      const validCategories = [
+        '蔬菜', '水果', '肉类', '海鲜', '蛋奶', '豆制品',
+        '主食', '调味料', '干货', '饮品', '零食', '其他'
+      ];
+
+      if (validCategories.contains(category)) {
+        return category;
+      }
+
+      return null;
+    } on DioException {
+      return null; // 网络错误时静默返回 null
+    } catch (e) {
+      return null;
+    }
+  }
+
   /// 生成菜单计划
   Future<MenuPlanResult> generateMealPlan({
     required FamilyModel family,
@@ -203,6 +254,11 @@ class AIService {
     required int days,
     required List<String> mealTypes,
     int dishesPerMeal = 2,
+    String? moodInput,
+    List<String>? recentRecipeNames,
+    List<String>? likedRecipes,
+    List<String>? dislikedRecipes,
+    List<String>? favoriteRecipes,
   }) async {
     if (!config.isConfigured) {
       throw AIServiceException('API 密钥未配置');
@@ -212,8 +268,17 @@ class AIService {
     final familyInfo = _buildFamilyInfo(family);
     final inventoryInfo = _buildInventoryInfo(inventory);
 
+    // 构建偏好信息
+    final preferenceInfo = _buildPreferenceInfo(
+      recentRecipeNames: recentRecipeNames,
+      likedRecipes: likedRecipes,
+      dislikedRecipes: dislikedRecipes,
+      favoriteRecipes: favoriteRecipes,
+    );
+
     // 根据天数动态调整 token 限制，确保多天菜单完整生成
-    final maxTokens = 4096 + (days - 1) * 1500;
+    // 每天约需 1500-2000 tokens (含所有餐次和菜品)
+    final maxTokens = 4096 + days * 2000;
 
     try {
       final response = await _dio.post('/chat/completions', data: {
@@ -226,19 +291,24 @@ class AIService {
             'content': '''你是一位专业的家庭营养师和烹饪顾问。
 你的任务是根据家庭成员的健康状况、口味偏好和现有食材，生成营养均衡、美味可口的家庭菜单计划。
 
+【重要】你必须完整生成用户要求的全部天数，不能省略或跳过任何一天！
+
 注意事项：
 1. 优先使用库存中的食材，减少浪费
 2. 根据家庭成员健康状况调整菜单（如有控糖需求，减少高糖食物；有高血压，减少盐分）
 3. 当健康需求有冲突时（如控糖 vs 儿童成长），智能平衡，提供折中方案
 4. 营养均衡，每天蛋白质、碳水、蔬菜搭配合理
-5. 菜谱要详细实用，包含具体用量、步骤和技巧
+5. 菜谱要简洁实用，步骤精简（3-5步）
 6. 购物清单只包含库存不足的食材
 7. 使用自然、家常的语气描述
-8. 每餐生成指定数量的菜品'''
+8. 每餐生成指定数量的菜品
+9. 避免推荐近期吃过的菜品
+10. 参考用户的历史评价偏好
+11. 多天菜单要保证菜品多样性，不重复'''
           },
           {
             'role': 'user',
-            'content': '''请根据以下信息生成$days天的家庭菜单计划：
+            'content': '''请生成 **$days 天** 的完整家庭菜单计划（从今天开始，共 $days 天，不能少！）：
 
 【家庭信息】
 $familyInfo
@@ -250,40 +320,44 @@ $inventoryInfo
 ${mealTypes.join('、')}
 
 【每餐菜品数量】
-每餐生成 $dishesPerMeal 道菜
+$dishesPerMeal 道菜
+${moodInput != null && moodInput.isNotEmpty ? '''
 
-请生成菜单并以JSON格式返回，格式如下：
+【今天的特别需求/心情】
+$moodInput''' : ''}
+$preferenceInfo
+
+请严格按以下JSON格式返回（days数组必须包含 $days 个元素）：
 {
   "days": [
     {
       "date": "第1天",
       "meals": [
         {
-          "type": "breakfast/lunch/dinner/snack",
+          "type": "早餐/午餐/晚餐/加餐",
           "recipes": [
             {
               "name": "菜名",
-              "description": "简短描述",
+              "description": "一句话描述",
               "prepTime": 10,
               "cookTime": 15,
               "ingredients": [{"name":"食材","quantity":1,"unit":"个"}],
-              "steps": ["步骤1","步骤2"],
-              "tips": "烹饪技巧",
-              "tags": ["控糖友好","快手菜"],
+              "steps": ["步骤1","步骤2","步骤3"],
+              "tips": "技巧",
+              "tags": ["标签"],
               "nutrition": {"calories":200,"protein":15,"carbs":20,"fat":8}
             }
           ]
         }
       ]
-    }
+    },
+    ... // 共 $days 天
   ],
-  "shoppingList": [
-    {"name":"食材","quantity":1,"unit":"个","category":"蔬菜","notes":"备注"}
-  ],
-  "nutritionSummary": "营养总结和建议（仅供参考，不代替医生建议）"
+  "shoppingList": [{"name":"食材","quantity":1,"unit":"个","category":"蔬菜"}],
+  "nutritionSummary": "营养总结（仅供参考）"
 }
 
-只返回JSON，不要其他文字。''',
+注意：days数组必须有 $days 个元素，每天必须包含所有选择的餐次！只返回JSON。''',
           },
         ],
       });
@@ -420,6 +494,112 @@ $familyInfo
     }
   }
 
+  /// 对话模式：提取用户饮食偏好
+  Future<MoodChatResponse> chatForMoodExtraction({
+    required List<dynamic> messages,
+    required dynamic family,
+    required List<dynamic> inventory,
+  }) async {
+    if (!config.isConfigured) {
+      throw AIServiceException('API 密钥未配置');
+    }
+
+    // 构建家庭和库存信息
+    String familyInfo = '暂无家庭信息';
+    String inventoryInfo = '暂无库存信息';
+
+    if (family != null && family is FamilyModel) {
+      familyInfo = _buildFamilyInfo(family);
+    }
+
+    if (inventory.isNotEmpty) {
+      final typedInventory = inventory.whereType<IngredientModel>().toList();
+      if (typedInventory.isNotEmpty) {
+        inventoryInfo = _buildInventoryInfo(typedInventory);
+      }
+    }
+
+    // 构建对话历史
+    final chatMessages = <Map<String, dynamic>>[
+      {
+        'role': 'system',
+        'content': '''你是一位友好、专业的家庭美食顾问。你的任务是通过对话了解用户今天想吃什么，帮助他们确定饮食偏好。
+
+你需要：
+1. 用亲切自然的语气与用户交流
+2. 根据用户的描述（如心情、口味、食材偏好）给出建议
+3. 适时提出问题帮助用户明确需求
+4. 当用户的需求足够明确时，总结偏好并推荐3-5道菜品
+
+【当前家庭信息】
+$familyInfo
+
+【现有食材库存】
+$inventoryInfo
+
+回复格式要求：
+- 正常对话时，直接返回自然语言回复
+- 当你认为已经充分了解用户需求时，在回复最后添加以下JSON（用```json```包裹）：
+```json
+{
+  "extractedPreference": "提取的用户偏好总结",
+  "suggestedDishes": ["菜品1", "菜品2", "菜品3"]
+}
+```
+
+注意：只有当你认为可以给出推荐时才添加JSON，普通对话不需要。'''
+      },
+    ];
+
+    // 添加对话历史
+    for (final msg in messages) {
+      if (msg.isLoading) continue;
+      chatMessages.add({
+        'role': msg.isUser ? 'user' : 'assistant',
+        'content': msg.content,
+      });
+    }
+
+    try {
+      final response = await _dio.post('/chat/completions', data: {
+        'model': config.model,
+        'max_tokens': 1024,
+        'temperature': 0.8,
+        'messages': chatMessages,
+      });
+
+      final content = response.data['choices'][0]['message']['content'] as String;
+
+      // 解析回复，检查是否包含JSON
+      String reply = content;
+      String? extractedPreference;
+      List<String>? suggestedDishes;
+
+      // 尝试提取JSON部分
+      final jsonMatch = RegExp(r'```json\s*([\s\S]*?)\s*```').firstMatch(content);
+      if (jsonMatch != null) {
+        final jsonStr = jsonMatch.group(1)!;
+        try {
+          final data = json.decode(jsonStr) as Map<String, dynamic>;
+          extractedPreference = data['extractedPreference'] as String?;
+          suggestedDishes = (data['suggestedDishes'] as List?)?.cast<String>();
+          // 移除JSON部分，保留自然语言回复
+          reply = content.replaceAll(jsonMatch.group(0)!, '').trim();
+        } catch (_) {
+          // JSON解析失败，忽略
+        }
+      }
+
+      return MoodChatResponse(
+        reply: reply,
+        extractedPreference: extractedPreference,
+        suggestedDishes: suggestedDishes,
+      );
+    } on DioException catch (e) {
+      throw AIServiceException('对话失败: ${_parseError(e)}');
+    }
+  }
+
   /// 估算营养信息
   Future<NutritionInfoModel> analyzeNutrition(RecipeModel recipe) async {
     if (!config.isConfigured) {
@@ -489,6 +669,10 @@ $familyInfo
       if (member.dislikes.isNotEmpty) {
         buffer.write('，忌口：${member.dislikes.join("、")}');
       }
+      // 备注信息（包含具体疾病或特殊说明）
+      if (member.notes != null && member.notes!.isNotEmpty) {
+        buffer.write('，特别注意：${member.notes}');
+      }
       buffer.writeln();
     }
     return buffer.toString();
@@ -510,6 +694,41 @@ $familyInfo
         buffer.writeln('- ${item.name}：${item.remainingQuantity}${item.unit}');
       }
     }
+    return buffer.toString();
+  }
+
+  String _buildPreferenceInfo({
+    List<String>? recentRecipeNames,
+    List<String>? likedRecipes,
+    List<String>? dislikedRecipes,
+    List<String>? favoriteRecipes,
+  }) {
+    final buffer = StringBuffer();
+
+    // 避免重复的近期菜品
+    if (recentRecipeNames != null && recentRecipeNames.isNotEmpty) {
+      buffer.writeln('\n【请避免推荐以下近期吃过的菜品】');
+      buffer.writeln(recentRecipeNames.join('、'));
+    }
+
+    // 喜欢的菜品风格
+    if (likedRecipes != null && likedRecipes.isNotEmpty) {
+      buffer.writeln('\n【用户喜欢的菜品（可参考类似风格）】');
+      buffer.writeln(likedRecipes.take(10).join('、'));
+    }
+
+    // 不喜欢的菜品
+    if (dislikedRecipes != null && dislikedRecipes.isNotEmpty) {
+      buffer.writeln('\n【用户不喜欢的菜品（请避免）】');
+      buffer.writeln(dislikedRecipes.take(10).join('、'));
+    }
+
+    // 收藏的菜谱优先
+    if (favoriteRecipes != null && favoriteRecipes.isNotEmpty) {
+      buffer.writeln('\n【用户收藏的菜谱（可优先考虑）】');
+      buffer.writeln(favoriteRecipes.take(10).join('、'));
+    }
+
     return buffer.toString();
   }
 
@@ -732,4 +951,17 @@ class ShoppingItemData {
       notes: json['notes'] as String?,
     );
   }
+}
+
+/// 对话模式响应
+class MoodChatResponse {
+  final String reply;
+  final String? extractedPreference;
+  final List<String>? suggestedDishes;
+
+  MoodChatResponse({
+    required this.reply,
+    this.extractedPreference,
+    this.suggestedDishes,
+  });
 }

@@ -134,12 +134,27 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     required bool isSelected,
     required VoidCallback onSelected,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppColors.textPrimaryDark : AppColors.textPrimary;
+
     return FilterChip(
-      label: Text(label),
+      label: Text(
+        label,
+        style: TextStyle(
+          color: isSelected ? (isDark ? Colors.white : AppColors.primary) : textColor,
+          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+        ),
+      ),
       selected: isSelected,
       onSelected: (_) => onSelected(),
-      selectedColor: AppColors.primary.withOpacity(0.2),
-      checkmarkColor: AppColors.primary,
+      elevation: 0,
+      pressElevation: 0,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      backgroundColor: isDark ? AppColors.inputBackgroundDark : AppColors.chipBackground,
+      selectedColor: isDark ? AppColors.primaryDark.withOpacity(0.3) : AppColors.primary.withOpacity(0.2),
+      side: isDark ? BorderSide(color: isSelected ? AppColors.primaryDark : AppColors.borderDark) : BorderSide.none,
+      checkmarkColor: isDark ? Colors.white : AppColors.primary,
     );
   }
 

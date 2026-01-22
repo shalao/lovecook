@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/models/family_model.dart';
 import '../../data/repositories/family_repository.dart';
-import '../providers/family_provider.dart';
+import '../providers/family_provider.dart'; // 包含 dietary_options 的导出
 
 class FamilyDetailScreen extends ConsumerStatefulWidget {
   final String familyId;
@@ -240,11 +240,23 @@ class _FamilyDetailScreenState extends ConsumerState<FamilyDetailScreen> {
     final ageController = TextEditingController(
       text: member?.age != null ? member!.age.toString() : '',
     );
+    final notesController = TextEditingController(text: member?.notes ?? '');
     int? age = member?.age;
     String? selectedAgeGroup = member?.ageGroup;
     List<String> selectedHealthConditions = member?.healthConditions.toList() ?? [];
     List<String> selectedAllergies = member?.allergies.toList() ?? [];
-    List<String> dislikes = member?.dislikes.toList() ?? [];
+    List<String> selectedTastePrefs = <String>[];
+    List<String> selectedRestrictions = <String>[];
+
+    // 从 dislikes 中解析已有的口味偏好和饮食禁忌
+    final existingDislikes = member?.dislikes.toList() ?? [];
+    for (final item in existingDislikes) {
+      if (tastePreferences.contains(item)) {
+        selectedTastePrefs.add(item);
+      } else if (dietaryRestrictions.contains(item)) {
+        selectedRestrictions.add(item);
+      }
+    }
 
     showModalBottomSheet(
       context: context,
@@ -334,25 +346,44 @@ class _FamilyDetailScreenState extends ConsumerState<FamilyDetailScreen> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: healthConditionOptions.map((condition) {
-                    final isSelected = selectedHealthConditions.contains(condition);
-                    return FilterChip(
-                      label: Text(condition),
-                      selected: isSelected,
-                      onSelected: (selected) {
-                        setSheetState(() {
-                          if (selected) {
-                            selectedHealthConditions.add(condition);
-                          } else {
-                            selectedHealthConditions.remove(condition);
-                          }
-                        });
-                      },
+                Builder(
+                  builder: (context) {
+                    final isDark = Theme.of(context).brightness == Brightness.dark;
+                    final textColor = isDark ? AppColors.textPrimaryDark : AppColors.textPrimary;
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: healthConditionOptions.map((condition) {
+                        final isSelected = selectedHealthConditions.contains(condition);
+                        return FilterChip(
+                          label: Text(
+                            condition,
+                            style: TextStyle(
+                              color: isSelected ? (isDark ? Colors.white : AppColors.primary) : textColor,
+                            ),
+                          ),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            setSheetState(() {
+                              if (selected) {
+                                selectedHealthConditions.add(condition);
+                              } else {
+                                selectedHealthConditions.remove(condition);
+                              }
+                            });
+                          },
+                          elevation: 0,
+                          pressElevation: 0,
+                          shadowColor: Colors.transparent,
+                          surfaceTintColor: Colors.transparent,
+                          backgroundColor: isDark ? AppColors.inputBackgroundDark : AppColors.chipBackground,
+                          selectedColor: isDark ? AppColors.primaryDark.withOpacity(0.3) : AppColors.primary.withOpacity(0.15),
+                          side: isDark ? BorderSide(color: isSelected ? AppColors.primaryDark : AppColors.borderDark) : BorderSide.none,
+                          checkmarkColor: isDark ? Colors.white : AppColors.primary,
+                        );
+                      }).toList(),
                     );
-                  }).toList(),
+                  },
                 ),
                 const SizedBox(height: 24),
 
@@ -362,26 +393,162 @@ class _FamilyDetailScreenState extends ConsumerState<FamilyDetailScreen> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: commonAllergens.map((allergen) {
-                    final isSelected = selectedAllergies.contains(allergen);
-                    return FilterChip(
-                      label: Text(allergen),
-                      selected: isSelected,
-                      selectedColor: Colors.red.shade100,
-                      onSelected: (selected) {
-                        setSheetState(() {
-                          if (selected) {
-                            selectedAllergies.add(allergen);
-                          } else {
-                            selectedAllergies.remove(allergen);
-                          }
-                        });
-                      },
+                Builder(
+                  builder: (context) {
+                    final isDark = Theme.of(context).brightness == Brightness.dark;
+                    final textColor = isDark ? AppColors.textPrimaryDark : AppColors.textPrimary;
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: commonAllergens.map((allergen) {
+                        final isSelected = selectedAllergies.contains(allergen);
+                        return FilterChip(
+                          label: Text(
+                            allergen,
+                            style: TextStyle(
+                              color: isSelected
+                                  ? (isDark ? Colors.red.shade300 : Colors.red.shade700)
+                                  : textColor,
+                            ),
+                          ),
+                          selected: isSelected,
+                          selectedColor: isDark ? Colors.red.shade900.withOpacity(0.3) : Colors.red.shade100,
+                          onSelected: (selected) {
+                            setSheetState(() {
+                              if (selected) {
+                                selectedAllergies.add(allergen);
+                              } else {
+                                selectedAllergies.remove(allergen);
+                              }
+                            });
+                          },
+                          elevation: 0,
+                          pressElevation: 0,
+                          shadowColor: Colors.transparent,
+                          surfaceTintColor: Colors.transparent,
+                          backgroundColor: isDark ? AppColors.inputBackgroundDark : AppColors.chipBackground,
+                          side: isDark ? BorderSide(color: isSelected ? Colors.red.shade700 : AppColors.borderDark) : BorderSide.none,
+                          checkmarkColor: isDark ? Colors.red.shade300 : Colors.red.shade700,
+                        );
+                      }).toList(),
                     );
-                  }).toList(),
+                  },
+                ),
+                const SizedBox(height: 24),
+
+                // 口味偏好
+                const Text(
+                  '口味偏好',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 8),
+                Builder(
+                  builder: (context) {
+                    final isDark = Theme.of(context).brightness == Brightness.dark;
+                    final textColor = isDark ? AppColors.textPrimaryDark : AppColors.textPrimary;
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: tastePreferences.map((pref) {
+                        final isSelected = selectedTastePrefs.contains(pref);
+                        return FilterChip(
+                          label: Text(
+                            pref,
+                            style: TextStyle(
+                              color: isSelected
+                                  ? (isDark ? Colors.orange.shade300 : Colors.orange.shade700)
+                                  : textColor,
+                            ),
+                          ),
+                          selected: isSelected,
+                          selectedColor: isDark ? Colors.orange.shade900.withOpacity(0.3) : Colors.orange.shade100,
+                          onSelected: (selected) {
+                            setSheetState(() {
+                              if (selected) {
+                                selectedTastePrefs.add(pref);
+                              } else {
+                                selectedTastePrefs.remove(pref);
+                              }
+                            });
+                          },
+                          elevation: 0,
+                          pressElevation: 0,
+                          shadowColor: Colors.transparent,
+                          surfaceTintColor: Colors.transparent,
+                          backgroundColor: isDark ? AppColors.inputBackgroundDark : AppColors.chipBackground,
+                          side: isDark ? BorderSide(color: isSelected ? Colors.orange.shade700 : AppColors.borderDark) : BorderSide.none,
+                          checkmarkColor: isDark ? Colors.orange.shade300 : Colors.orange.shade700,
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
+                const SizedBox(height: 24),
+
+                // 饮食禁忌
+                const Text(
+                  '饮食禁忌',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 8),
+                Builder(
+                  builder: (context) {
+                    final isDark = Theme.of(context).brightness == Brightness.dark;
+                    final textColor = isDark ? AppColors.textPrimaryDark : AppColors.textPrimary;
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: dietaryRestrictions.map((restriction) {
+                        final isSelected = selectedRestrictions.contains(restriction);
+                        return FilterChip(
+                          label: Text(
+                            restriction,
+                            style: TextStyle(
+                              color: isSelected
+                                  ? (isDark ? Colors.purple.shade300 : Colors.purple.shade700)
+                                  : textColor,
+                            ),
+                          ),
+                          selected: isSelected,
+                          selectedColor: isDark ? Colors.purple.shade900.withOpacity(0.3) : Colors.purple.shade100,
+                          onSelected: (selected) {
+                            setSheetState(() {
+                              if (selected) {
+                                selectedRestrictions.add(restriction);
+                              } else {
+                                selectedRestrictions.remove(restriction);
+                              }
+                            });
+                          },
+                          elevation: 0,
+                          pressElevation: 0,
+                          shadowColor: Colors.transparent,
+                          surfaceTintColor: Colors.transparent,
+                          backgroundColor: isDark ? AppColors.inputBackgroundDark : AppColors.chipBackground,
+                          side: isDark ? BorderSide(color: isSelected ? Colors.purple.shade700 : AppColors.borderDark) : BorderSide.none,
+                          checkmarkColor: isDark ? Colors.purple.shade300 : Colors.purple.shade700,
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
+                const SizedBox(height: 24),
+
+                // 备注说明
+                const Text(
+                  '备注说明',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: notesController,
+                  decoration: const InputDecoration(
+                    hintText: '如：糖尿病需严格控糖、痛风避免高嘌呤食物...',
+                    prefixIcon: Icon(Icons.notes),
+                    helperText: '填写具体的疾病或饮食注意事项，AI 生成菜谱时会参考',
+                  ),
+                  maxLines: 3,
+                  minLines: 1,
                 ),
                 const SizedBox(height: 32),
 
@@ -396,6 +563,15 @@ class _FamilyDetailScreenState extends ConsumerState<FamilyDetailScreen> {
                       return;
                     }
 
+                    // 合并口味偏好和饮食禁忌到 dislikes
+                    final combinedDislikes = [
+                      ...selectedTastePrefs,
+                      ...selectedRestrictions,
+                    ];
+
+                    // 获取备注内容
+                    final notes = notesController.text.trim();
+
                     final newMember = FamilyMemberModel(
                       id: member?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
                       name: name,
@@ -403,7 +579,8 @@ class _FamilyDetailScreenState extends ConsumerState<FamilyDetailScreen> {
                       ageGroup: selectedAgeGroup,
                       healthConditions: selectedHealthConditions,
                       allergies: selectedAllergies,
-                      dislikes: dislikes,
+                      dislikes: combinedDislikes,
+                      notes: notes.isEmpty ? null : notes,
                     );
 
                     final repository = ref.read(familyRepositoryProvider);
@@ -536,6 +713,8 @@ class _MemberCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
@@ -546,10 +725,14 @@ class _MemberCard extends StatelessWidget {
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: AppColors.primary.withOpacity(0.1),
+                  backgroundColor: isDark
+                      ? AppColors.primaryDark.withOpacity(0.2)
+                      : AppColors.primary.withOpacity(0.1),
                   child: Text(
                     member.name.substring(0, 1),
-                    style: const TextStyle(color: AppColors.primary),
+                    style: TextStyle(
+                      color: isDark ? AppColors.primaryDark : AppColors.primary,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -569,7 +752,7 @@ class _MemberCard extends StatelessWidget {
                           member.ageGroup!,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey.shade600,
+                            color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
                           ),
                         ),
                     ],
@@ -592,10 +775,20 @@ class _MemberCard extends StatelessWidget {
                 runSpacing: 4,
                 children: member.healthConditions.map((c) {
                   return Chip(
-                    label: Text(c, style: const TextStyle(fontSize: 12)),
-                    backgroundColor: AppColors.secondary.withOpacity(0.1),
+                    label: Text(
+                      c,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimary,
+                      ),
+                    ),
+                    backgroundColor: isDark
+                        ? AppColors.secondaryDark.withOpacity(0.2)
+                        : AppColors.secondary.withOpacity(0.1),
+                    side: isDark ? BorderSide(color: AppColors.secondaryDark.withOpacity(0.5)) : BorderSide.none,
                     padding: EdgeInsets.zero,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    elevation: 0,
                   );
                 }).toList(),
               ),
@@ -607,12 +800,115 @@ class _MemberCard extends StatelessWidget {
                 runSpacing: 4,
                 children: member.allergies.map((a) {
                   return Chip(
-                    label: Text('过敏: $a', style: const TextStyle(fontSize: 12)),
-                    backgroundColor: Colors.red.shade50,
+                    label: Text(
+                      '过敏: $a',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.red.shade300 : Colors.red.shade700,
+                      ),
+                    ),
+                    backgroundColor: isDark
+                        ? Colors.red.shade900.withOpacity(0.3)
+                        : Colors.red.shade50,
+                    side: isDark ? BorderSide(color: Colors.red.shade700) : BorderSide.none,
                     padding: EdgeInsets.zero,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    elevation: 0,
                   );
                 }).toList(),
+              ),
+            ],
+            // 显示口味偏好和饮食禁忌
+            if (member.dislikes.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: member.dislikes.map((d) {
+                  // 判断是口味偏好还是饮食禁忌
+                  final isTastePref = tastePreferences.contains(d);
+                  final isRestriction = dietaryRestrictions.contains(d);
+
+                  Color chipColor;
+                  String prefix;
+                  if (isTastePref) {
+                    chipColor = isDark ? Colors.orange.shade300 : Colors.orange.shade700;
+                    prefix = '';
+                  } else if (isRestriction) {
+                    chipColor = isDark ? Colors.purple.shade300 : Colors.purple.shade700;
+                    prefix = '';
+                  } else {
+                    chipColor = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
+                    prefix = '';
+                  }
+
+                  return Chip(
+                    label: Text(
+                      '$prefix$d',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: chipColor,
+                      ),
+                    ),
+                    backgroundColor: isDark
+                        ? (isTastePref
+                            ? Colors.orange.shade900.withOpacity(0.3)
+                            : isRestriction
+                                ? Colors.purple.shade900.withOpacity(0.3)
+                                : Colors.grey.shade800)
+                        : (isTastePref
+                            ? Colors.orange.shade50
+                            : isRestriction
+                                ? Colors.purple.shade50
+                                : Colors.grey.shade100),
+                    side: isDark
+                        ? BorderSide(color: isTastePref
+                            ? Colors.orange.shade700
+                            : isRestriction
+                                ? Colors.purple.shade700
+                                : Colors.grey.shade600)
+                        : BorderSide.none,
+                    padding: EdgeInsets.zero,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    elevation: 0,
+                  );
+                }).toList(),
+              ),
+            ],
+            // 显示备注
+            if (member.notes != null && member.notes!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.blue.shade900.withOpacity(0.2)
+                      : Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isDark ? Colors.blue.shade700 : Colors.blue.shade200,
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: isDark ? Colors.blue.shade300 : Colors.blue.shade700,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        member.notes!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark ? Colors.blue.shade200 : Colors.blue.shade800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ],

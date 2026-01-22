@@ -49,6 +49,11 @@ class RecipeRepository {
         .toList();
   }
 
+  /// 获取收藏菜谱名称列表
+  List<String> getFavoriteRecipeNames(String? familyId) {
+    return getFavoriteRecipes(familyId).map((r) => r.name).toList();
+  }
+
   /// 切换收藏状态
   Future<void> toggleFavorite(String id) async {
     final recipe = getRecipeById(id);

@@ -1,181 +1,150 @@
-# Love Cook - Project Guidelines
+# CLAUDE.md
 
-## Overview
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Love Cook 是一个家庭餐食 AI 助手，帮助家庭建立独立餐食档案，生成健康、经济、可持续的家庭餐计划。
+## Project Overview
 
----
+Love Cook 是一个家庭餐食 AI 助手 Flutter 应用，帮助家庭管理食材库存、生成智能菜单、查看菜谱和管理购物清单。
 
-## Requirements
+**技术栈**: Flutter Web + Riverpod (状态管理) + GoRouter (路由) + Hive (本地存储) + OpenAI GPT-4o (AI)
 
-### 范围 (Scope)
+## Common Commands
 
-#### 包含功能
-1. **家庭档案管理** - 多家庭/账户、成员管理、健康状况、忌口/过敏、口味偏好、餐次配置
-2. **智能库存管理** - 拍照识别、语音输入、手动输入、自动合并、保质期管理、临期提醒
-3. **AI 菜单生成** - 1-7天灵活周期、餐次定制、库存优先、健康适配、智能平衡、菜单预览/调整
-4. **菜谱详情** - 完整食谱、库存推荐、AI 新菜谱、收藏功能、替代食材建议
-5. **营养分析** - 单菜估算、周汇总、不均衡提醒（仅供参考，不代替医生建议）
-6. **购物清单** - 自动生成、分类展示、多格式导出（文本/图片/PDF）、分享、已购勾选
-7. **系统设置** - 多语言界面、API 配置、数据管理
-
-#### 技术边界
-- **平台**: Flutter Web（可扩展至 iOS/Android）
-- **AI 方案**: OpenAI GPT API (gpt-4o)
-- **数据存储**: 本地优先（Hive）
-- **状态管理**: Riverpod
-- **路由**: GoRouter
-
-### 用例 (Use Cases)
-
-#### UC-01: 家庭档案设置
-- 用户创建家庭，添加成员信息（姓名、年龄分组、健康状况、过敏源、忌口）
-- 支持多家庭切换
-- 配置餐次（早/中/晚/加餐）
-
-#### UC-02: 库存录入
-- **拍照识别**: 用户拍摄冰箱/储物柜，AI 识别食材（种类、数量、新鲜度、存储建议）
-- **语音输入**: 用户说"三根胡萝卜"，系统解析并录入
-- **手动输入**: 用户手动输入或粘贴采购单
-
-#### UC-03: 菜单生成
-- 用户选择天数（1-7天）和餐次
-- AI 根据家庭健康状况和库存生成菜单
-- 用户可预览、调整、替换菜品
-- 支持保存历史菜单
-
-#### UC-04: 菜谱查看
-- 显示完整菜谱（用量、步骤、时间、技巧）
-- 根据库存推荐可做菜谱
-- AI 生成新菜谱
-- 收藏喜欢的菜谱
-
-#### UC-05: 购物清单
-- 根据菜单和库存自动生成购物清单
-- 分类展示（蔬菜/肉类/调味料等）
-- 导出为文本/图片/PDF
-- 购物时勾选已购项目
-
-### 边界 (Boundaries)
-
-#### 包含
-- 家庭本地数据管理
-- AI 辅助的食材识别和菜单生成
-- 基于 AI 估算的营养分析
-- 购物清单生成和导出
-
-#### 不包含
-- 用户账户系统/云端同步
-- 在线菜谱数据库
-- 精确营养数据库计算
-- 外卖/配送服务集成
-- 价格比较/品牌推荐
-- 社交分享功能
-- 第三方登录
-
-#### 技术限制
-- 图片识别依赖 OpenAI GPT-4 Vision
-- 语音识别使用 Web Speech API（浏览器支持）
-- 本地存储容量受浏览器限制
-- AI 响应需要网络连接
-
-### 验收标准 (Acceptance Criteria)
-
-#### 功能验收
-- [ ] **家庭档案**
-  - [ ] 可创建多个家庭并切换
-  - [ ] 可添加/编辑/删除家庭成员
-  - [ ] 健康状况可正确选择和保存
-  - [ ] 忌口和偏好正确影响菜单生成
-
-- [ ] **库存管理**
-  - [ ] 拍照能识别食材（种类、数量、新鲜度）
-  - [ ] 语音输入能正确解析为食材
-  - [ ] 手动输入能正确解析
-  - [ ] 库存列表正确显示
-  - [ ] 临期提醒正常工作（3天内到期显示警告）
-
-- [ ] **菜单生成**
-  - [ ] 可选择 1-7 天生成
-  - [ ] 可配置餐次（早/中/晚/加餐）
-  - [ ] 优先使用库存食材
-  - [ ] 健康冲突时能智能平衡
-  - [ ] 生成的菜单符合家庭需求
-
-- [ ] **菜谱**
-  - [ ] 显示完整食谱（用量、步骤、时间、技巧）
-  - [ ] 可收藏菜谱
-  - [ ] 能根据库存推荐菜谱
-  - [ ] 营养估算显示正确
-
-- [ ] **购物清单**
-  - [ ] 自动生成正确（排除库存已有）
-  - [ ] 支持文本复制
-  - [ ] 支持导出图片
-  - [ ] 支持分享
-
-- [ ] **整体**
-  - [ ] 多语言切换正常（中文/英文）
-  - [ ] 数据本地持久化
-  - [ ] 应用启动正常（< 3秒）
-  - [ ] 页面导航流畅
-
-#### 非功能验收
-- [ ] Web 构建成功
-- [ ] 无严重安全漏洞
-- [ ] API 密钥安全存储（本地）
-- [ ] 响应式布局（手机/平板/桌面）
-
-### 未决问题 (Open Issues)
-
-1. **语音识别方案**: Web Speech API 浏览器兼容性问题，是否需要备用方案（Whisper API）？
-2. **离线支持**: AI 功能需要网络，离线时如何降级？
-3. **数据迁移**: 未来若支持云同步，本地数据如何迁移？
-4. **API 费用**: GPT-4 Vision 调用成本较高，是否限制调用频率？
-5. **多语言 AI 输出**: AI 生成内容是否跟随界面语言切换？
-
----
-
-## Development Guidelines
-
-### 项目结构
-```
-lib/
-├── main.dart
-├── app/
-│   ├── app.dart
-│   └── router.dart
-├── core/
-│   ├── theme/
-│   ├── widgets/
-│   └── services/
-├── features/
-│   ├── family/
-│   ├── inventory/
-│   ├── menu/
-│   ├── recipe/
-│   ├── shopping/
-│   └── settings/
-└── l10n/
-```
-
-### 代码规范
-- 使用 Riverpod 进行状态管理
-- 遵循 Feature-First + Clean Architecture
-- 使用 Hive 进行本地存储
-- 组件尽量抽取为可复用 Widget
-
-### 运行命令
 ```bash
 # 获取依赖
 flutter pub get
 
-# 生成 Hive adapters
+# 生成 Hive 适配器（修改数据模型后必须执行）
 flutter pub run build_runner build
 
 # 开发模式运行
 flutter run -d chrome
 
+# 代码分析
+flutter analyze
+
 # 生产构建
 flutter build web
+
+# 运行所有测试
+flutter test
+
+# 运行单个测试文件
+flutter test test/core/services/ai_service_test.dart
+
+# 运行特定测试组
+flutter test --plain-name "AIConfig"
 ```
+
+## Architecture
+
+### 分层架构 (Feature-First + Clean Architecture)
+
+```
+lib/
+├── app/                    # 应用配置
+│   ├── app.dart           # MaterialApp 配置
+│   └── router.dart        # GoRouter 路由定义 (AppRoutes)
+├── core/
+│   ├── services/          # 全局服务
+│   │   ├── ai_service.dart      # OpenAI GPT 集成 (AIService, AIConfig)
+│   │   ├── storage_service.dart # Hive 存储管理 (HiveBoxes)
+│   │   └── locale_service.dart  # 多语言服务
+│   ├── theme/             # 主题配置 (AppColors, AppTheme)
+│   └── widgets/           # 通用组件 (MainScaffold)
+├── features/              # 功能模块
+│   ├── family/            # 家庭档案管理
+│   ├── inventory/         # 库存管理
+│   ├── menu/              # 菜单计划
+│   ├── recipe/            # 菜谱管理
+│   ├── recommend/         # AI 推荐引擎
+│   ├── shopping/          # 购物清单
+│   ├── history/           # 用餐历史
+│   ├── cooking/           # 烹饪模式
+│   ├── profile/           # 用户档案
+│   └── settings/          # 应用设置
+└── l10n/                  # 本地化资源
+```
+
+### Feature 模块结构
+
+每个 feature 遵循统一结构：
+```
+features/{feature}/
+├── data/
+│   ├── models/           # Hive 数据模型 (@HiveType)
+│   └── repositories/     # 数据访问层
+└── presentation/
+    ├── screens/          # UI 页面
+    └── providers/        # Riverpod 状态管理
+```
+
+### 数据流
+
+```
+UI (Screens) → Providers (Riverpod StateNotifier) → Repositories → Hive Storage
+                    ↓
+              AIService (OpenAI API)
+```
+
+### Hive TypeId 分配
+
+| TypeId | 模型 |
+|--------|------|
+| 0-2 | Family (FamilyModel, FamilyMemberModel, MealSettingsModel) |
+| 10 | Ingredient (IngredientModel) |
+| 20-22 | Recipe (RecipeModel, RecipeIngredientModel, NutritionInfoModel) |
+| 30-32 | MealPlan (MealPlanModel, DayPlanModel, MealModel) |
+| 40-41 | Shopping (ShoppingListModel, ShoppingItemModel) |
+| 50-51 | History (MealHistoryModel, MealHistoryRecipeModel) |
+
+### 关键 Providers
+
+- `aiConfigProvider` / `aiServiceProvider` - AI 服务配置和实例
+- `storageServiceProvider` - Hive 存储服务
+- `familyListProvider` - 家庭列表状态
+- `inventoryProvider` - 库存列表
+- `recommendProvider` - AI 推荐状态
+- `localeProvider` - 当前语言
+
+## Development Notes
+
+### 修改数据模型
+
+1. 修改 `*_model.dart` 文件
+2. 运行 `flutter pub run build_runner build` 生成适配器
+3. 新增模型需分配唯一 TypeId
+
+### AI 服务集成
+
+`AIService` 提供以下方法：
+- `recognizeIngredients()` - 图片识别食材
+- `parseIngredientText()` - 文本解析食材
+- `generateMealPlan()` - 生成菜单计划
+- `suggestRecipes()` - 根据库存推荐菜谱
+- `generateRecipe()` - 生成单个菜谱
+
+### 饮食选项定义
+
+预设选项集中在 `lib/features/family/data/models/dietary_options.dart`：
+- `healthConditionOptions` - 健康状况
+- `commonAllergens` - 过敏源
+- `tastePreferences` - 口味偏好
+- `dietaryRestrictions` - 饮食禁忌
+
+### 路由
+
+所有路由定义在 `lib/app/router.dart` 的 `AppRoutes` 类中。使用 `ShellRoute` 包装 `MainScaffold` 提供底部导航栏。
+
+### 主题和暗黑模式
+
+- 颜色定义在 `lib/core/theme/app_colors.dart`，分为 Light 和 Dark 两套
+- 主题配置在 `lib/core/theme/app_theme.dart`
+- Chips 组件需要显式设置 `elevation: 0`, `shadowColor: Colors.transparent`, `surfaceTintColor: Colors.transparent` 以避免 Material 3 覆盖层问题
+- 使用 `Theme.of(context).brightness == Brightness.dark` 检测当前主题模式
+
+### 测试模式
+
+- 使用 `flutter_test` + `mockito` 进行单元测试
+- 使用 `http_mock_adapter` 模拟 AI API 请求
+- 测试文件位于 `test/` 目录，镜像 `lib/` 结构

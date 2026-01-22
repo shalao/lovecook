@@ -123,7 +123,7 @@ class _RecipeCard extends StatelessWidget {
       },
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
@@ -295,6 +295,7 @@ class _EmptyRecipeList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -302,22 +303,22 @@ class _EmptyRecipeList extends StatelessWidget {
           Icon(
             icon,
             size: 64,
-            color: AppColors.textTertiary,
+            color: isDark ? AppColors.textTertiaryDark : AppColors.textTertiary,
           ),
           const SizedBox(height: 16),
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
-              color: AppColors.textSecondary,
+              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             subtitle,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
-              color: AppColors.textTertiary,
+              color: isDark ? AppColors.textTertiaryDark : AppColors.textTertiary,
             ),
           ),
         ],

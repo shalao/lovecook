@@ -43,6 +43,7 @@ class MenuScreen extends ConsumerWidget {
   }
 
   Widget _buildEmptyState(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -50,14 +51,14 @@ class MenuScreen extends ConsumerWidget {
           Icon(
             Icons.restaurant_menu,
             size: 64,
-            color: AppColors.textTertiary,
+            color: isDark ? AppColors.textTertiaryDark : AppColors.textTertiary,
           ),
           const SizedBox(height: 16),
           Text(
             '暂无菜单计划',
             style: TextStyle(
               fontSize: 16,
-              color: AppColors.textSecondary,
+              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 8),
@@ -65,7 +66,7 @@ class MenuScreen extends ConsumerWidget {
             '点击下方按钮生成本周菜单',
             style: TextStyle(
               fontSize: 14,
-              color: AppColors.textTertiary,
+              color: isDark ? AppColors.textTertiaryDark : AppColors.textTertiary,
             ),
           ),
         ],

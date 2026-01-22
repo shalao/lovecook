@@ -124,7 +124,7 @@ class _ShoppingListTab extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withAlpha(13),
@@ -255,7 +255,7 @@ class _InventoryTab extends ConsumerWidget {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.surface,
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withAlpha(13),
@@ -655,6 +655,7 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -662,22 +663,22 @@ class _EmptyState extends StatelessWidget {
           Icon(
             icon,
             size: 64,
-            color: AppColors.textTertiary,
+            color: isDark ? AppColors.textTertiaryDark : AppColors.textTertiary,
           ),
           const SizedBox(height: 16),
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
-              color: AppColors.textSecondary,
+              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             subtitle,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
-              color: AppColors.textTertiary,
+              color: isDark ? AppColors.textTertiaryDark : AppColors.textTertiary,
             ),
           ),
         ],

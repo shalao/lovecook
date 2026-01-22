@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/family_model.dart';
 import '../../data/repositories/family_repository.dart';
 
+// 导出饮食选项供其他文件使用
+export '../../data/models/dietary_options.dart';
+
 /// 家庭列表状态
 class FamilyListState {
   final List<FamilyModel> families;
@@ -164,40 +167,4 @@ final familyFormProvider =
   return FamilyFormNotifier();
 });
 
-/// 健康状况选项
-const healthConditionOptions = [
-  '控糖',
-  '脂肪肝',
-  '高血压',
-  '高血脂',
-  '高血糖',
-  '减脂期',
-  '增肌期',
-  '儿童成长',
-  '孕期',
-  '哺乳期',
-  '素食',
-  '低盐饮食',
-];
-
-/// 年龄分组选项
-const ageGroupOptions = [
-  '婴幼儿 (0-3岁)',
-  '儿童 (4-12岁)',
-  '青少年 (13-17岁)',
-  '成人 (18-60岁)',
-  '老年 (60岁以上)',
-];
-
-/// 常见过敏源
-const commonAllergens = [
-  '牛奶',
-  '鸡蛋',
-  '花生',
-  '坚果',
-  '小麦',
-  '大豆',
-  '鱼类',
-  '贝类',
-  '芝麻',
-];
+// 选项定义已移至 dietary_options.dart

@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../family/data/repositories/family_repository.dart';
+import '../../../history/presentation/providers/history_provider.dart';
 import '../../../inventory/data/models/ingredient_model.dart';
 import '../../../inventory/presentation/providers/inventory_provider.dart';
 import '../../data/models/recipe_model.dart';
@@ -35,8 +37,8 @@ class RecipeDetailScreen extends ConsumerWidget {
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showCompleteCookingDialog(context, ref, recipe),
-        icon: const Icon(Icons.check),
-        label: const Text('完成烹饪'),
+        icon: const Icon(Icons.check_circle_outline),
+        label: const Text('已吃'),
         backgroundColor: Colors.green,
       ),
       body: CustomScrollView(
@@ -107,11 +109,16 @@ class RecipeDetailScreen extends ConsumerWidget {
                 children: [
                   // 简介
                   if (recipe.description != null) ...[
-                    Text(
-                      recipe.description!,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: Colors.grey[600],
-                          ),
+                    Builder(
+                      builder: (context) {
+                        final isDark = Theme.of(context).brightness == Brightness.dark;
+                        return Text(
+                          recipe.description!,
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
+                              ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -167,28 +174,39 @@ class RecipeDetailScreen extends ConsumerWidget {
                   ],
 
                   // 健康声明
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline, color: Colors.orange[700], size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '营养数据仅供参考，不代替医生建议',
-                            style: TextStyle(
-                              color: Colors.orange[700],
-                              fontSize: 12,
-                            ),
+                  Builder(
+                    builder: (context) {
+                      final isDark = Theme.of(context).brightness == Brightness.dark;
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.orange.withOpacity(0.15) : Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isDark ? Colors.orange.withOpacity(0.4) : Colors.orange.withOpacity(0.3),
                           ),
                         ),
-                      ],
-                    ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              color: isDark ? Colors.orange[400] : Colors.orange[700],
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '营养数据仅供参考，不代替医生建议',
+                                style: TextStyle(
+                                  color: isDark ? Colors.orange[300] : Colors.orange[700],
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 32),
                 ],
@@ -239,10 +257,11 @@ class RecipeDetailScreen extends ConsumerWidget {
     required String label,
     required String value,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
+        color: isDark ? AppColors.surfaceDark : Colors.grey[100],
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -251,15 +270,16 @@ class RecipeDetailScreen extends ConsumerWidget {
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 14,
+              color: isDark ? AppColors.textPrimaryDark : null,
             ),
           ),
           Text(
             label,
             style: TextStyle(
-              color: Colors.grey[600],
+              color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
               fontSize: 12,
             ),
           ),
@@ -319,9 +339,10 @@ class RecipeDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildIngredients(BuildContext context, RecipeModel recipe) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: isDark ? AppColors.surfaceDark : Colors.grey[50],
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -336,7 +357,9 @@ class RecipeDetailScreen extends ConsumerWidget {
               border: isLast
                   ? null
                   : Border(
-                      bottom: BorderSide(color: Colors.grey[200]!),
+                      bottom: BorderSide(
+                        color: isDark ? AppColors.borderDark : Colors.grey[200]!,
+                      ),
                     ),
             ),
             child: Row(
@@ -346,7 +369,10 @@ class RecipeDetailScreen extends ConsumerWidget {
                     children: [
                       Text(
                         ingredient.name,
-                        style: const TextStyle(fontWeight: FontWeight.w500),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? AppColors.textPrimaryDark : null,
+                        ),
                       ),
                       if (ingredient.isOptional)
                         Container(
@@ -356,12 +382,15 @@ class RecipeDetailScreen extends ConsumerWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.grey[300],
+                            color: isDark ? AppColors.inputBackgroundDark : Colors.grey[300],
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Text(
+                          child: Text(
                             '可选',
-                            style: TextStyle(fontSize: 10),
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isDark ? AppColors.textSecondaryDark : null,
+                            ),
                           ),
                         ),
                     ],
@@ -369,7 +398,9 @@ class RecipeDetailScreen extends ConsumerWidget {
                 ),
                 Text(
                   '${ingredient.quantity}${ingredient.unit}',
-                  style: TextStyle(color: Colors.grey[600]),
+                  style: TextStyle(
+                    color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
+                  ),
                 ),
               ],
             ),
@@ -380,6 +411,7 @@ class RecipeDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildSteps(BuildContext context, RecipeModel recipe) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       children: recipe.steps.asMap().entries.map((entry) {
         final index = entry.key;
@@ -413,12 +445,15 @@ class RecipeDetailScreen extends ConsumerWidget {
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.grey[50],
+                    color: isDark ? AppColors.surfaceDark : Colors.grey[50],
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     step,
-                    style: const TextStyle(height: 1.5),
+                    style: TextStyle(
+                      height: 1.5,
+                      color: isDark ? AppColors.textPrimaryDark : null,
+                    ),
                   ),
                 ),
               ),
@@ -430,23 +465,30 @@ class RecipeDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildTips(BuildContext context, RecipeModel recipe) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.amber.withOpacity(0.1),
+        color: isDark ? Colors.amber.withOpacity(0.15) : Colors.amber.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.amber.withOpacity(0.3)),
+        border: Border.all(
+          color: isDark ? Colors.amber.withOpacity(0.4) : Colors.amber.withOpacity(0.3),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.tips_and_updates, color: Colors.amber[700], size: 20),
+          Icon(
+            Icons.tips_and_updates,
+            color: isDark ? Colors.amber[400] : Colors.amber[700],
+            size: 20,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               recipe.tips!,
               style: TextStyle(
-                color: Colors.amber[900],
+                color: isDark ? Colors.amber[200] : Colors.amber[900],
                 height: 1.5,
               ),
             ),
@@ -457,11 +499,12 @@ class RecipeDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildNutrition(BuildContext context, RecipeModel recipe) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final nutrition = recipe.nutrition!;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: isDark ? AppColors.surfaceDark : Colors.grey[50],
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -470,6 +513,7 @@ class RecipeDetailScreen extends ConsumerWidget {
             children: [
               Expanded(
                 child: _buildNutritionItem(
+                  context,
                   '热量',
                   '${nutrition.calories?.toInt() ?? '-'}',
                   'kcal',
@@ -478,6 +522,7 @@ class RecipeDetailScreen extends ConsumerWidget {
               ),
               Expanded(
                 child: _buildNutritionItem(
+                  context,
                   '蛋白质',
                   '${nutrition.protein?.toInt() ?? '-'}',
                   'g',
@@ -486,6 +531,7 @@ class RecipeDetailScreen extends ConsumerWidget {
               ),
               Expanded(
                 child: _buildNutritionItem(
+                  context,
                   '碳水',
                   '${nutrition.carbs?.toInt() ?? '-'}',
                   'g',
@@ -494,6 +540,7 @@ class RecipeDetailScreen extends ConsumerWidget {
               ),
               Expanded(
                 child: _buildNutritionItem(
+                  context,
                   '脂肪',
                   '${nutrition.fat?.toInt() ?? '-'}',
                   'g',
@@ -507,7 +554,7 @@ class RecipeDetailScreen extends ConsumerWidget {
             Text(
               nutrition.summary!,
               style: TextStyle(
-                color: Colors.grey[600],
+                color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
                 fontSize: 13,
               ),
             ),
@@ -518,11 +565,14 @@ class RecipeDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildNutritionItem(
+    BuildContext context,
     String label,
     String value,
     String unit,
     Color color,
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final adjustedColor = isDark ? color.withOpacity(0.8) : color;
     return Column(
       children: [
         Text(
@@ -530,14 +580,14 @@ class RecipeDetailScreen extends ConsumerWidget {
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: color,
+            color: adjustedColor,
           ),
         ),
         Text(
           unit,
           style: TextStyle(
             fontSize: 12,
-            color: color,
+            color: adjustedColor,
           ),
         ),
         const SizedBox(height: 4),
@@ -545,7 +595,7 @@ class RecipeDetailScreen extends ConsumerWidget {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.grey[600],
+            color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
           ),
         ),
       ],
@@ -582,6 +632,39 @@ class _CompleteCookingDialog extends ConsumerStatefulWidget {
 
 class _CompleteCookingDialogState extends ConsumerState<_CompleteCookingDialog> {
   bool _isLoading = false;
+  String _selectedMealType = 'lunch';
+  bool _deductInventory = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // 根据当前时间自动选择餐次
+    final hour = DateTime.now().hour;
+    if (hour < 10) {
+      _selectedMealType = 'breakfast';
+    } else if (hour < 14) {
+      _selectedMealType = 'lunch';
+    } else if (hour < 20) {
+      _selectedMealType = 'dinner';
+    } else {
+      _selectedMealType = 'snacks';
+    }
+  }
+
+  String _getMealTypeName(String type) {
+    switch (type) {
+      case 'breakfast':
+        return '早餐';
+      case 'lunch':
+        return '午餐';
+      case 'dinner':
+        return '晚餐';
+      case 'snacks':
+        return '甜点';
+      default:
+        return type;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -601,52 +684,104 @@ class _CompleteCookingDialogState extends ConsumerState<_CompleteCookingDialog> 
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '完成制作「${recipe.name}」后，将从库存扣减以下食材：',
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 12),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 300),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: recipe.ingredients.length,
-                itemBuilder: (context, index) {
-                  final ing = recipe.ingredients[index];
-                  return ListTile(
-                    dense: true,
-                    leading: Icon(
-                      ing.isOptional ? Icons.remove_circle_outline : Icons.check_circle,
-                      color: ing.isOptional ? Colors.grey : Colors.green,
-                      size: 20,
-                    ),
-                    title: Text(
-                      ing.name,
-                      style: TextStyle(
-                        color: ing.isOptional ? Colors.grey : null,
-                        decoration: ing.isOptional ? TextDecoration.lineThrough : null,
-                      ),
-                    ),
-                    trailing: Text(
-                      '${ing.quantity}${ing.unit}',
-                      style: TextStyle(
-                        color: ing.isOptional ? Colors.grey : Colors.grey[600],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  );
-                },
-              ),
+            // 餐次选择
+            const Text(
+              '这是哪一餐？',
+              style: TextStyle(fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 8),
-            Text(
-              '* 可选食材不会扣减',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[500],
-                fontStyle: FontStyle.italic,
-              ),
+            Builder(
+              builder: (context) {
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+                final textColor = isDark ? AppColors.textPrimaryDark : AppColors.textPrimary;
+                return Wrap(
+                  spacing: 8,
+                  children: ['breakfast', 'lunch', 'dinner', 'snacks'].map((type) {
+                    final isSelected = _selectedMealType == type;
+                    return ChoiceChip(
+                      label: Text(
+                        _getMealTypeName(type),
+                        style: TextStyle(
+                          color: isSelected ? (isDark ? Colors.white : AppColors.primary) : textColor,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                        ),
+                      ),
+                      selected: isSelected,
+                      onSelected: (_) => setState(() => _selectedMealType = type),
+                      elevation: 0,
+                      pressElevation: 0,
+                      shadowColor: Colors.transparent,
+                      surfaceTintColor: Colors.transparent,
+                      backgroundColor: isDark ? AppColors.inputBackgroundDark : AppColors.chipBackground,
+                      selectedColor: isDark ? AppColors.primaryDark.withOpacity(0.3) : AppColors.primary.withOpacity(0.15),
+                      side: isDark ? BorderSide(color: isSelected ? AppColors.primaryDark : AppColors.borderDark) : BorderSide.none,
+                    );
+                  }).toList(),
+                );
+              },
             ),
+            const SizedBox(height: 16),
+
+            // 是否扣减库存
+            CheckboxListTile(
+              value: _deductInventory,
+              onChanged: (v) => setState(() => _deductInventory = v ?? true),
+              title: const Text('扣减食材库存'),
+              subtitle: const Text('取消勾选则仅记录用餐'),
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+            ),
+
+            if (_deductInventory) ...[
+              const SizedBox(height: 8),
+              Text(
+                '将扣减以下食材：',
+                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: recipe.ingredients.length,
+                  itemBuilder: (context, index) {
+                    final ing = recipe.ingredients[index];
+                    return ListTile(
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      leading: Icon(
+                        ing.isOptional ? Icons.remove_circle_outline : Icons.check_circle,
+                        color: ing.isOptional ? Colors.grey : Colors.green,
+                        size: 18,
+                      ),
+                      title: Text(
+                        ing.name,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: ing.isOptional ? Colors.grey : null,
+                          decoration: ing.isOptional ? TextDecoration.lineThrough : null,
+                        ),
+                      ),
+                      trailing: Text(
+                        '${ing.quantity}${ing.unit}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: ing.isOptional ? Colors.grey : Colors.grey[600],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Text(
+                '* 可选食材不会扣减',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey[500],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -655,22 +790,23 @@ class _CompleteCookingDialogState extends ConsumerState<_CompleteCookingDialog> 
           onPressed: _isLoading ? null : () => Navigator.pop(context),
           child: const Text('取消'),
         ),
-        ElevatedButton(
+        ElevatedButton.icon(
           onPressed: _isLoading ? null : _completeCooking,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
-            foregroundColor: Colors.white,
-          ),
-          child: _isLoading
+          icon: _isLoading
               ? const SizedBox(
-                  width: 20,
-                  height: 20,
+                  width: 18,
+                  height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                 )
-              : const Text('确认扣减'),
+              : const Icon(Icons.check, size: 18),
+          label: const Text('已吃'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+          ),
         ),
       ],
     );
@@ -685,49 +821,62 @@ class _CompleteCookingDialogState extends ConsumerState<_CompleteCookingDialog> 
         throw Exception('未选择家庭');
       }
 
-      final inventoryNotifier = ref.read(inventoryProvider.notifier);
-      final inventoryState = ref.read(inventoryProvider);
-
       int deductedCount = 0;
       int notFoundCount = 0;
 
-      for (final ing in widget.recipe.ingredients) {
-        // 跳过可选食材
-        if (ing.isOptional) continue;
+      // 如果需要扣减库存
+      if (_deductInventory) {
+        final inventoryNotifier = ref.read(inventoryProvider.notifier);
+        final inventoryState = ref.read(inventoryProvider);
 
-        // 在库存中查找食材
-        final inventoryItem = inventoryState.ingredients.firstWhere(
-          (item) => item.name.toLowerCase() == ing.name.toLowerCase(),
-          orElse: () => IngredientModel(
-            id: '',
-            familyId: '',
-            name: '',
-            quantity: 0,
-            unit: '',
-            source: '',
-            addedAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          ),
-        );
+        for (final ing in widget.recipe.ingredients) {
+          // 跳过可选食材
+          if (ing.isOptional) continue;
 
-        if (inventoryItem.id.isNotEmpty) {
-          // 扣减库存
-          await inventoryNotifier.deductQuantity(inventoryItem.id, ing.quantity);
-          deductedCount++;
-        } else {
-          notFoundCount++;
+          // 在库存中查找食材
+          final inventoryItem = inventoryState.ingredients.firstWhere(
+            (item) => item.name.toLowerCase() == ing.name.toLowerCase(),
+            orElse: () => IngredientModel(
+              id: '',
+              familyId: '',
+              name: '',
+              quantity: 0,
+              unit: '',
+              source: '',
+              addedAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ),
+          );
+
+          if (inventoryItem.id.isNotEmpty) {
+            // 扣减库存
+            await inventoryNotifier.deductQuantity(inventoryItem.id, ing.quantity);
+            deductedCount++;
+          } else {
+            notFoundCount++;
+          }
         }
       }
+
+      // 记录到用餐历史
+      await ref.read(historyProvider.notifier).addMealHistory(
+        date: DateTime.now(),
+        mealType: _selectedMealType,
+        recipeId: widget.recipe.id,
+        recipeName: widget.recipe.name,
+      );
 
       if (mounted) {
         Navigator.pop(context);
 
-        String message = '烹饪完成！';
-        if (deductedCount > 0) {
-          message += '已扣减 $deductedCount 项食材';
-        }
-        if (notFoundCount > 0) {
-          message += '，$notFoundCount 项食材库存中未找到';
+        String message = '已记录「${widget.recipe.name}」为${_getMealTypeName(_selectedMealType)}';
+        if (_deductInventory) {
+          if (deductedCount > 0) {
+            message += '，已扣减 $deductedCount 项食材';
+          }
+          if (notFoundCount > 0) {
+            message += '，$notFoundCount 项库存中未找到';
+          }
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -735,6 +884,13 @@ class _CompleteCookingDialogState extends ConsumerState<_CompleteCookingDialog> 
             content: Text(message),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: '查看日历',
+              textColor: Colors.white,
+              onPressed: () {
+                context.push(AppRoutes.mealCalendar);
+              },
+            ),
           ),
         );
       }

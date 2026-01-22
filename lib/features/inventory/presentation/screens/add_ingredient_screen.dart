@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/services/ai_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../family/data/repositories/family_repository.dart';
+import '../../data/models/ingredient_category_map.dart' hide ingredientCategories;
 import '../providers/inventory_provider.dart';
 
 class AddIngredientScreen extends ConsumerStatefulWidget {
@@ -97,6 +101,7 @@ class _AddMethodCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Card(
       child: InkWell(
         onTap: onTap,
@@ -135,7 +140,7 @@ class _AddMethodCard extends StatelessWidget {
                       description,
                       style: TextStyle(
                         fontSize: 14,
-                        color: AppColors.textSecondary,
+                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
                       ),
                     ),
                   ],
@@ -143,7 +148,7 @@ class _AddMethodCard extends StatelessWidget {
               ),
               Icon(
                 Icons.chevron_right,
-                color: AppColors.textTertiary,
+                color: isDark ? AppColors.textTertiaryDark : AppColors.textTertiary,
               ),
             ],
           ),
@@ -170,12 +175,86 @@ class _ManualInputFormState extends ConsumerState<_ManualInputForm> {
   String _selectedUnit = '个';
   DateTime? _expiryDate;
   bool _isSubmitting = false;
+  bool _isAutoMatched = false; // 是否自动匹配的类别
+  bool _isClassifying = false; // AI 正在分类中
+  Timer? _debounceTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController.addListener(_onNameChanged);
+  }
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
+    _nameController.removeListener(_onNameChanged);
     _nameController.dispose();
     _quantityController.dispose();
     super.dispose();
+  }
+
+  /// 食材名称变化时自动匹配类别
+  void _onNameChanged() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      setState(() {
+        _selectedCategory = null;
+        _isAutoMatched = false;
+        _isClassifying = false;
+      });
+      _debounceTimer?.cancel();
+      return;
+    }
+
+    // 1. 本地映射表匹配
+    final localMatch = matchIngredientCategory(name);
+    if (localMatch != null) {
+      setState(() {
+        _selectedCategory = localMatch;
+        _isAutoMatched = true;
+        _isClassifying = false;
+      });
+      _debounceTimer?.cancel();
+      return;
+    }
+
+    // 2. 本地未匹配，延迟触发 AI 分类（避免频繁调用）
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 800), () {
+      _classifyWithAI(name);
+    });
+  }
+
+  /// 使用 AI 分类食材
+  Future<void> _classifyWithAI(String name) async {
+    if (!mounted) return;
+
+    setState(() => _isClassifying = true);
+
+    try {
+      final aiService = ref.read(aiServiceProvider);
+      final category = await aiService.classifyIngredient(name);
+
+      if (!mounted) return;
+
+      if (category != null && ingredientCategories.contains(category)) {
+        setState(() {
+          _selectedCategory = category;
+          _isAutoMatched = true;
+          _isClassifying = false;
+        });
+      } else {
+        setState(() {
+          _isAutoMatched = false;
+          _isClassifying = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isClassifying = false);
+      }
+    }
   }
 
   @override
@@ -207,9 +286,28 @@ class _ManualInputFormState extends ConsumerState<_ManualInputForm> {
           // 类别选择
           DropdownButtonFormField<String>(
             value: _selectedCategory,
-            decoration: const InputDecoration(
-              labelText: '类别',
-              prefixIcon: Icon(Icons.category),
+            decoration: InputDecoration(
+              labelText: _isClassifying
+                  ? '类别（AI 识别中...）'
+                  : _isAutoMatched
+                      ? '类别（已自动匹配）'
+                      : '类别',
+              prefixIcon: _isClassifying
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Padding(
+                        padding: EdgeInsets.all(12),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : Icon(
+                      _isAutoMatched ? Icons.auto_awesome : Icons.category,
+                      color: _isAutoMatched ? AppColors.primary : null,
+                    ),
+              suffixIcon: _isAutoMatched
+                  ? Icon(Icons.check_circle, color: AppColors.success, size: 20)
+                  : null,
             ),
             items: ingredientCategories.map((category) {
               return DropdownMenuItem(
@@ -217,7 +315,10 @@ class _ManualInputFormState extends ConsumerState<_ManualInputForm> {
                 child: Text(category),
               );
             }).toList(),
-            onChanged: (value) => setState(() => _selectedCategory = value),
+            onChanged: (value) => setState(() {
+              _selectedCategory = value;
+              _isAutoMatched = false; // 用户手动选择时清除自动匹配标记
+            }),
           ),
           const SizedBox(height: 16),
 
@@ -444,9 +545,21 @@ class _QuickExpiryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppColors.textPrimaryDark : AppColors.textPrimary;
+
     return ActionChip(
-      label: Text(label),
+      label: Text(
+        label,
+        style: TextStyle(color: textColor, fontWeight: FontWeight.w500),
+      ),
       onPressed: onTap,
+      elevation: 0,
+      pressElevation: 0,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      backgroundColor: isDark ? AppColors.inputBackgroundDark : AppColors.chipBackground,
+      side: isDark ? BorderSide(color: AppColors.borderDark) : BorderSide.none,
     );
   }
 }

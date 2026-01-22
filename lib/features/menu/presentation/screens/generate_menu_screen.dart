@@ -117,23 +117,37 @@ class GenerateMenuScreen extends ConsumerWidget {
                 ),
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            children: [1, 3, 5, 7].map((days) {
-              final isSelected = state.settings.days == days;
-              return ChoiceChip(
-                label: Text('$days 天'),
-                selected: isSelected,
-                onSelected: (selected) {
-                  if (selected) notifier.setDays(days);
-                },
-                selectedColor: AppColors.primary.withValues(alpha: 0.2),
-                labelStyle: TextStyle(
-                  color: isSelected ? AppColors.primary : null,
-                  fontWeight: isSelected ? FontWeight.w600 : null,
-                ),
+          Builder(
+            builder: (context) {
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              final textColor = isDark ? AppColors.textPrimaryDark : AppColors.textPrimary;
+              return Wrap(
+                spacing: 8,
+                children: [1, 3, 5, 7].map((days) {
+                  final isSelected = state.settings.days == days;
+                  return ChoiceChip(
+                    label: Text(
+                      '$days 天',
+                      style: TextStyle(
+                        color: isSelected ? (isDark ? Colors.white : AppColors.primary) : textColor,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                      ),
+                    ),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      if (selected) notifier.setDays(days);
+                    },
+                    elevation: 0,
+                    pressElevation: 0,
+                    shadowColor: Colors.transparent,
+                    surfaceTintColor: Colors.transparent,
+                    backgroundColor: isDark ? AppColors.inputBackgroundDark : AppColors.chipBackground,
+                    selectedColor: isDark ? AppColors.primaryDark.withOpacity(0.3) : AppColors.primary.withOpacity(0.15),
+                    side: isDark ? BorderSide(color: isSelected ? AppColors.primaryDark : AppColors.borderDark) : BorderSide.none,
+                  );
+                }).toList(),
               );
-            }).toList(),
+            },
           ),
 
           const SizedBox(height: 28),
@@ -146,23 +160,37 @@ class GenerateMenuScreen extends ConsumerWidget {
                 ),
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            children: [1, 2, 3].map((count) {
-              final isSelected = state.settings.dishesPerMeal == count;
-              return ChoiceChip(
-                label: Text('$count 道菜'),
-                selected: isSelected,
-                onSelected: (selected) {
-                  if (selected) notifier.setDishesPerMeal(count);
-                },
-                selectedColor: AppColors.primary.withValues(alpha: 0.2),
-                labelStyle: TextStyle(
-                  color: isSelected ? AppColors.primary : null,
-                  fontWeight: isSelected ? FontWeight.w600 : null,
-                ),
+          Builder(
+            builder: (context) {
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              final textColor = isDark ? AppColors.textPrimaryDark : AppColors.textPrimary;
+              return Wrap(
+                spacing: 8,
+                children: [1, 2, 3].map((count) {
+                  final isSelected = state.settings.dishesPerMeal == count;
+                  return ChoiceChip(
+                    label: Text(
+                      '$count 道菜',
+                      style: TextStyle(
+                        color: isSelected ? (isDark ? Colors.white : AppColors.primary) : textColor,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                      ),
+                    ),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      if (selected) notifier.setDishesPerMeal(count);
+                    },
+                    elevation: 0,
+                    pressElevation: 0,
+                    shadowColor: Colors.transparent,
+                    surfaceTintColor: Colors.transparent,
+                    backgroundColor: isDark ? AppColors.inputBackgroundDark : AppColors.chipBackground,
+                    selectedColor: isDark ? AppColors.primaryDark.withOpacity(0.3) : AppColors.primary.withOpacity(0.15),
+                    side: isDark ? BorderSide(color: isSelected ? AppColors.primaryDark : AppColors.borderDark) : BorderSide.none,
+                  );
+                }).toList(),
               );
-            }).toList(),
+            },
           ),
 
           const SizedBox(height: 28),

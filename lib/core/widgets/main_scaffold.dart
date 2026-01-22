@@ -27,12 +27,6 @@ class _MainScaffoldState extends State<MainScaffold> {
       path: AppRoutes.recommend,
     ),
     _NavItem(
-      icon: Icons.favorite_border,
-      activeIcon: Icons.favorite,
-      label: '收藏',
-      path: AppRoutes.favorites,
-    ),
-    _NavItem(
       icon: Icons.shopping_cart_outlined,
       activeIcon: Icons.shopping_cart,
       label: '购物',
@@ -94,7 +88,9 @@ class _MainScaffoldState extends State<MainScaffold> {
           color: Theme.of(context).colorScheme.surface,
           border: Border(
             top: BorderSide(
-              color: AppColors.divider,
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? AppColors.dividerDark
+                  : AppColors.divider,
               width: 0.5,
             ),
           ),
@@ -153,9 +149,10 @@ class _NavBarItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final color = isSelected
         ? Theme.of(context).colorScheme.primary
-        : AppColors.textTertiary;
+        : (isDark ? AppColors.textTertiaryDark : AppColors.textTertiary);
 
     return GestureDetector(
       onTap: onTap,

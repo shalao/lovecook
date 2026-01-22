@@ -13,6 +13,8 @@ import '../features/cooking/presentation/screens/cooking_mode_screen.dart';
 import '../features/shopping/presentation/screens/shopping_list_screen.dart';
 import '../features/settings/presentation/screens/settings_screen.dart';
 import '../features/recommend/presentation/screens/recommend_screen.dart';
+import '../features/recommend/presentation/screens/mood_chat_screen.dart';
+import '../features/history/presentation/screens/meal_calendar_screen.dart';
 import '../features/profile/presentation/screens/profile_screen.dart';
 import '../core/widgets/main_scaffold.dart';
 
@@ -20,6 +22,8 @@ import '../core/widgets/main_scaffold.dart';
 class AppRoutes {
   static const String home = '/';
   static const String recommend = '/';
+  static const String moodChat = '/mood-chat';
+  static const String mealCalendar = '/meal-calendar';
   static const String favorites = '/favorites';
   static const String shopping = '/shopping';
   static const String profile = '/profile';
@@ -46,6 +50,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.recommend,
             builder: (context, state) => const RecommendScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.moodChat,
+            builder: (context, state) => const MoodChatScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.mealCalendar,
+            builder: (context, state) => const MealCalendarScreen(),
           ),
           GoRoute(
             path: AppRoutes.favorites,

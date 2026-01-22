@@ -5,7 +5,32 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/router.dart';
 import '../../../../core/services/ai_service.dart';
 import '../../../../core/services/locale_service.dart';
+import '../../../../core/services/storage_service.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../recommend/data/models/recommend_settings.dart';
+
+/// 避重天数设置 Provider
+final avoidRecentDaysProvider = StateNotifierProvider<AvoidRecentDaysNotifier, int>((ref) {
+  final storage = ref.watch(storageServiceProvider);
+  return AvoidRecentDaysNotifier(storage);
+});
+
+class AvoidRecentDaysNotifier extends StateNotifier<int> {
+  final StorageService _storage;
+
+  AvoidRecentDaysNotifier(this._storage) : super(7) {
+    _load();
+  }
+
+  void _load() {
+    state = _storage.settingsBox.get('avoidRecentDays', defaultValue: 7) as int;
+  }
+
+  Future<void> setDays(int days) async {
+    await _storage.settingsBox.put('avoidRecentDays', days);
+    state = days;
+  }
+}
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -14,6 +39,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = ref.watch(localeProvider);
     final aiConfig = ref.watch(aiConfigProvider);
+    final avoidDays = ref.watch(avoidRecentDaysProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -41,6 +67,18 @@ class SettingsScreen extends ConsumerWidget {
                 subtitle: Text(locale.languageCode == 'zh' ? '中文' : 'English'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _showLanguageDialog(context, ref),
+              ),
+            ],
+          ),
+          _SettingsSection(
+            title: '推荐设置',
+            children: [
+              ListTile(
+                leading: const Icon(Icons.history_toggle_off),
+                title: const Text('避免重复推荐天数'),
+                subtitle: Text('$avoidDays 天内不重复推荐相同菜品'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _showAvoidDaysDialog(context, ref, avoidDays),
               ),
             ],
           ),
@@ -125,6 +163,48 @@ class SettingsScreen extends ConsumerWidget {
             );
           }).toList(),
         ),
+      ),
+    );
+  }
+
+  void _showAvoidDaysDialog(BuildContext context, WidgetRef ref, int currentDays) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('避免重复推荐天数'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '系统会避免推荐这段时间内吃过的菜品',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 16),
+            ...RecommendSettings.availableAvoidRecentDays.map((days) {
+              return RadioListTile<int>(
+                title: Text('$days 天'),
+                value: days,
+                groupValue: currentDays,
+                onChanged: (value) {
+                  if (value != null) {
+                    ref.read(avoidRecentDaysProvider.notifier).setDays(value);
+                    Navigator.pop(context);
+                  }
+                },
+              );
+            }),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+        ],
       ),
     );
   }
@@ -245,6 +325,7 @@ class _SettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -255,7 +336,7 @@ class _SettingsSection extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
+              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
               letterSpacing: 0.5,
             ),
           ),

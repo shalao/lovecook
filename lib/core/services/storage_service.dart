@@ -7,6 +7,7 @@ import '../../features/inventory/data/models/ingredient_model.dart';
 import '../../features/recipe/data/models/recipe_model.dart';
 import '../../features/menu/data/models/meal_plan_model.dart';
 import '../../features/shopping/data/models/shopping_list_model.dart';
+import '../../features/history/data/models/meal_history_model.dart';
 
 /// Hive Box 名称
 class HiveBoxes {
@@ -15,6 +16,7 @@ class HiveBoxes {
   static const String recipes = 'recipes';
   static const String mealPlans = 'meal_plans';
   static const String shoppingLists = 'shopping_lists';
+  static const String mealHistory = 'meal_history';
   static const String settings = 'settings';
 }
 
@@ -89,6 +91,14 @@ class StorageService {
     if (!Hive.isAdapterRegistered(41)) {
       Hive.registerAdapter(ShoppingItemModelAdapter());
     }
+
+    // MealHistory 相关
+    if (!Hive.isAdapterRegistered(50)) {
+      Hive.registerAdapter(MealHistoryModelAdapter());
+    }
+    if (!Hive.isAdapterRegistered(51)) {
+      Hive.registerAdapter(MealHistoryRecipeModelAdapter());
+    }
   }
 
   Future<void> _openBoxes() async {
@@ -98,6 +108,7 @@ class StorageService {
       Hive.openBox<RecipeModel>(HiveBoxes.recipes),
       Hive.openBox<MealPlanModel>(HiveBoxes.mealPlans),
       Hive.openBox<ShoppingListModel>(HiveBoxes.shoppingLists),
+      Hive.openBox<MealHistoryModel>(HiveBoxes.mealHistory),
       Hive.openBox(HiveBoxes.settings),
     ]);
   }
@@ -108,6 +119,7 @@ class StorageService {
   Box<RecipeModel> get recipesBox => Hive.box<RecipeModel>(HiveBoxes.recipes);
   Box<MealPlanModel> get mealPlansBox => Hive.box<MealPlanModel>(HiveBoxes.mealPlans);
   Box<ShoppingListModel> get shoppingListsBox => Hive.box<ShoppingListModel>(HiveBoxes.shoppingLists);
+  Box<MealHistoryModel> get mealHistoryBox => Hive.box<MealHistoryModel>(HiveBoxes.mealHistory);
   Box get settingsBox => Hive.box(HiveBoxes.settings);
 
   /// 清除所有数据
@@ -117,6 +129,7 @@ class StorageService {
     await recipesBox.clear();
     await mealPlansBox.clear();
     await shoppingListsBox.clear();
+    await mealHistoryBox.clear();
     await settingsBox.clear();
   }
 

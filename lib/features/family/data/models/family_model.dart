@@ -80,6 +80,9 @@ class FamilyMemberModel {
   @HiveField(7)
   List<String> favorites;
 
+  @HiveField(8)
+  String? notes; // 备注（如：糖尿病需严格控糖、痛风避免高嘌呤食物等）
+
   FamilyMemberModel({
     required this.id,
     required this.name,
@@ -89,12 +92,14 @@ class FamilyMemberModel {
     this.allergies = const [],
     this.dislikes = const [],
     this.favorites = const [],
+    this.notes,
   });
 
   factory FamilyMemberModel.create({
     required String name,
     int? age,
     String? ageGroup,
+    String? notes,
   }) {
     return FamilyMemberModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -105,6 +110,7 @@ class FamilyMemberModel {
       allergies: [],
       dislikes: [],
       favorites: [],
+      notes: notes,
     );
   }
 

@@ -484,12 +484,24 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
   }
 
   Widget _buildTimerChip(BuildContext context, String label, int seconds) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppColors.textPrimaryDark : AppColors.textPrimary;
+
     return ActionChip(
-      label: Text(label),
+      label: Text(
+        label,
+        style: TextStyle(color: textColor, fontWeight: FontWeight.w500),
+      ),
       onPressed: () {
         Navigator.pop(context);
         _startTimer(seconds);
       },
+      elevation: 0,
+      pressElevation: 0,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      backgroundColor: isDark ? AppColors.inputBackgroundDark : AppColors.chipBackground,
+      side: isDark ? BorderSide(color: AppColors.borderDark) : BorderSide.none,
     );
   }
 }
