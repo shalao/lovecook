@@ -194,7 +194,7 @@ class _ManualInputFormState extends ConsumerState<_ManualInputForm> {
     super.dispose();
   }
 
-  /// 食材名称变化时自动匹配类别
+  /// 食材名称变化时自动匹配类别和单位
   void _onNameChanged() {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
@@ -214,6 +214,8 @@ class _ManualInputFormState extends ConsumerState<_ManualInputForm> {
         _selectedCategory = localMatch;
         _isAutoMatched = true;
         _isClassifying = false;
+        // 同时匹配推荐单位
+        _selectedUnit = getRecommendedUnit(name, localMatch);
       });
       _debounceTimer?.cancel();
       return;
@@ -243,6 +245,8 @@ class _ManualInputFormState extends ConsumerState<_ManualInputForm> {
           _selectedCategory = category;
           _isAutoMatched = true;
           _isClassifying = false;
+          // 根据 AI 识别的类别设置推荐单位
+          _selectedUnit = getRecommendedUnit(name, category);
         });
       } else {
         setState(() {

@@ -142,6 +142,7 @@ class _FamilyDetailScreenState extends ConsumerState<FamilyDetailScreen> {
   }
 
   Widget _buildEmptyMembersCard() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -150,12 +151,12 @@ class _FamilyDetailScreenState extends ConsumerState<FamilyDetailScreen> {
             Icon(
               Icons.person_add,
               size: 48,
-              color: Colors.grey.shade400,
+              color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade400,
             ),
             const SizedBox(height: 16),
             Text(
               '还没有添加成员',
-              style: TextStyle(color: Colors.grey.shade600),
+              style: TextStyle(color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600),
             ),
             const SizedBox(height: 16),
             ElevatedButton(

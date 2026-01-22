@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../recipe/data/models/recipe_model.dart';
+import '../../../recipe/data/repositories/recipe_repository.dart';
 import '../../data/models/recommend_settings.dart';
 import '../providers/recommend_provider.dart';
 
@@ -67,6 +68,10 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
               duration: const Duration(seconds: 2),
             ),
           );
+          // 刷新全部菜谱列表，确保新生成的菜谱同步显示
+          ref.invalidate(allRecipesProvider);
+          // 自动保存到菜单历史
+          ref.read(recommendProvider.notifier).saveToHistory();
           // 生成成功后收起设置面板
           setState(() => _showSettings = false);
         }
@@ -143,32 +148,39 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
 
           // 错误提示
           if (state.globalError != null)
-            Container(
-              padding: const EdgeInsets.all(12),
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.red[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red[200]!),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.error_outline, color: Colors.red[400], size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      state.globalError!,
-                      style: TextStyle(color: Colors.red[700], fontSize: 14),
-                    ),
+            Builder(
+              builder: (context) {
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.red.withOpacity(0.15) : Colors.red[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: isDark ? Colors.red.withOpacity(0.4) : Colors.red[200]!),
                   ),
-                ],
-              ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline, color: isDark ? Colors.red[400] : Colors.red[400], size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          state.globalError!,
+                          style: TextStyle(color: isDark ? Colors.red[300] : Colors.red[700], fontSize: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
 
           // 推荐结果
           if (state.hasAnyRecommendation) ...[
             // 显示生成结果统计
             _buildResultSummary(state),
+            // 保存到历史按钮
+            _buildSaveButton(state),
             const SizedBox(height: 16),
 
             // 多天显示 - 当请求的天数 > 1 或实际返回天数 > 1 时使用多天视图
@@ -184,6 +196,7 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
 
   Widget _buildGreeting() {
     final hour = DateTime.now().hour;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     String greeting;
     IconData icon;
 
@@ -210,9 +223,10 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
         const SizedBox(width: 12),
         Text(
           '$greeting，想吃点什么？',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w600,
+            color: isDark ? AppColors.textPrimaryDark : null,
           ),
         ),
       ],
@@ -582,6 +596,34 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
     );
   }
 
+  /// 构建保存到历史按钮
+  Widget _buildSaveButton(RecommendState state) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      child: OutlinedButton.icon(
+        onPressed: state.hasAnyRecommendation
+            ? () async {
+                final success = await ref.read(recommendProvider.notifier).saveToHistory();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(success ? '菜单已保存到历史' : '保存失败'),
+                      backgroundColor: success ? Colors.green : Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              }
+            : null,
+        icon: const Icon(Icons.bookmark_add_outlined),
+        label: const Text('保存到历史'),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+        ),
+      ),
+    );
+  }
+
   /// 构建单天视图
   List<Widget> _buildSingleDayView(RecommendState state) {
     final dayPlan = state.dayPlans.isNotEmpty ? state.dayPlans.first : null;
@@ -621,6 +663,7 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
     final requestedDays = state.settings.days;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // 遍历请求的天数，而不仅仅是返回的天数
     for (int i = 0; i < requestedDays; i++) {
@@ -685,7 +728,7 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
                 dateLabel,
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.grey[600],
+                  color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
                 ),
               ),
               if (dayPlan == null) ...[
@@ -694,7 +737,7 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
                   '未生成',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.orange[600],
+                    color: isDark ? Colors.orange[400] : Colors.orange[600],
                   ),
                 ),
               ],
@@ -710,18 +753,18 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
             padding: const EdgeInsets.all(16),
             margin: const EdgeInsets.only(bottom: 8),
             decoration: BoxDecoration(
-              color: Colors.orange[50],
+              color: isDark ? Colors.orange.withOpacity(0.15) : Colors.orange[50],
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange[200]!),
+              border: Border.all(color: isDark ? Colors.orange.withOpacity(0.4) : Colors.orange[200]!),
             ),
             child: Row(
               children: [
-                Icon(Icons.info_outline, color: Colors.orange[600], size: 20),
+                Icon(Icons.info_outline, color: isDark ? Colors.orange[400] : Colors.orange[600], size: 20),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     '该天菜单未能生成，请尝试重新生成',
-                    style: TextStyle(color: Colors.orange[700], fontSize: 13),
+                    style: TextStyle(color: isDark ? Colors.orange[300] : Colors.orange[700], fontSize: 13),
                   ),
                 ),
               ],
@@ -763,13 +806,13 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.grey[100],
+              color: isDark ? AppColors.inputBackgroundDark : Colors.grey[100],
               borderRadius: BorderRadius.circular(8),
             ),
             child: Center(
               child: Text(
                 '该天暂无推荐菜品',
-                style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                style: TextStyle(color: isDark ? AppColors.textTertiaryDark : Colors.grey[500], fontSize: 13),
               ),
             ),
           ),
@@ -781,6 +824,7 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
   }
 
   Widget _buildMealSection(MealRecommend meal, {bool showRefresh = true}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -791,9 +835,10 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
             const SizedBox(width: 8),
             Text(
               meal.typeName,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
+                color: isDark ? AppColors.textPrimaryDark : null,
               ),
             ),
             const Spacer(),
@@ -867,21 +912,22 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
   }
 
   Widget _buildErrorCard(String error) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.red[50],
+        color: isDark ? Colors.red.withOpacity(0.15) : Colors.red[50],
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red[200]!),
+        border: Border.all(color: isDark ? Colors.red.withOpacity(0.4) : Colors.red[200]!),
       ),
       child: Row(
         children: [
-          Icon(Icons.error_outline, color: Colors.red[400]),
+          Icon(Icons.error_outline, color: isDark ? Colors.red[400] : Colors.red[400]),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               error,
-              style: TextStyle(color: Colors.red[700]),
+              style: TextStyle(color: isDark ? Colors.red[300] : Colors.red[700]),
             ),
           ),
         ],
@@ -969,9 +1015,10 @@ class _RecipeCard extends ConsumerWidget {
                   // 菜名
                   Text(
                     recipe.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 15,
+                      color: isDark ? AppColors.textPrimaryDark : null,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -984,14 +1031,14 @@ class _RecipeCard extends ConsumerWidget {
                       Icon(
                         Icons.schedule,
                         size: 13,
-                        color: Colors.grey[500],
+                        color: isDark ? AppColors.textTertiaryDark : Colors.grey[500],
                       ),
                       const SizedBox(width: 3),
                       Text(
                         '$totalTime分钟',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey[600],
+                          color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
                         ),
                       ),
                       if (recipe.difficulty != null) ...[
@@ -999,14 +1046,14 @@ class _RecipeCard extends ConsumerWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.grey[100],
+                            color: isDark ? AppColors.inputBackgroundDark : Colors.grey[100],
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             recipe.difficulty!,
                             style: TextStyle(
                               fontSize: 10,
-                              color: Colors.grey[600],
+                              color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
                             ),
                           ),
                         ),
@@ -1025,17 +1072,17 @@ class _RecipeCard extends ConsumerWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.green[50],
+                      color: isDark ? Colors.green.withOpacity(0.15) : Colors.green[50],
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.check, size: 12, color: Colors.green[600]),
+                        Icon(Icons.check, size: 12, color: isDark ? Colors.green[400] : Colors.green[600]),
                         const SizedBox(width: 2),
                         Text(
                           '齐全',
-                          style: TextStyle(fontSize: 11, color: Colors.green[700]),
+                          style: TextStyle(fontSize: 11, color: isDark ? Colors.green[300] : Colors.green[700]),
                         ),
                       ],
                     ),
@@ -1044,16 +1091,16 @@ class _RecipeCard extends ConsumerWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.orange[50],
+                      color: isDark ? Colors.orange.withOpacity(0.15) : Colors.orange[50],
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       '缺${missingIngredients.length}样',
-                      style: TextStyle(fontSize: 11, color: Colors.orange[700]),
+                      style: TextStyle(fontSize: 11, color: isDark ? Colors.orange[300] : Colors.orange[700]),
                     ),
                   ),
                 const SizedBox(height: 4),
-                Icon(Icons.chevron_right, size: 20, color: Colors.grey[400]),
+                Icon(Icons.chevron_right, size: 20, color: isDark ? AppColors.textTertiaryDark : Colors.grey[400]),
               ],
             ),
           ],

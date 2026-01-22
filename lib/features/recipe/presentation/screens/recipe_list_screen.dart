@@ -9,7 +9,13 @@ import '../../data/models/recipe_model.dart';
 import '../../data/repositories/recipe_repository.dart';
 
 class RecipeListScreen extends ConsumerWidget {
-  const RecipeListScreen({super.key});
+  /// 初始显示的 Tab 索引: 0 = 收藏菜谱, 1 = 全部菜谱
+  final int initialTabIndex;
+
+  const RecipeListScreen({
+    super.key,
+    this.initialTabIndex = 0,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -18,6 +24,7 @@ class RecipeListScreen extends ConsumerWidget {
 
     return DefaultTabController(
       length: 2,
+      initialIndex: initialTabIndex,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('菜谱'),
@@ -117,6 +124,7 @@ class _RecipeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: () {
         context.push('${AppRoutes.recipes}/${recipe.id}');
@@ -127,7 +135,7 @@ class _RecipeCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withAlpha(13), // 0.05 * 255 = 12.75
+              color: Colors.black.withAlpha(isDark ? 40 : 13),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -194,9 +202,10 @@ class _RecipeCard extends StatelessWidget {
                   children: [
                     Text(
                       recipe.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
+                        color: isDark ? AppColors.textPrimaryDark : null,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -207,28 +216,28 @@ class _RecipeCard extends StatelessWidget {
                         Icon(
                           Icons.timer_outlined,
                           size: 14,
-                          color: Colors.grey[500],
+                          color: isDark ? AppColors.textTertiaryDark : Colors.grey[500],
                         ),
                         const SizedBox(width: 4),
                         Text(
                           '${recipe.prepTime + recipe.cookTime}分钟',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[500],
+                            color: isDark ? AppColors.textTertiaryDark : Colors.grey[500],
                           ),
                         ),
                         const Spacer(),
                         Icon(
                           Icons.people_outline,
                           size: 14,
-                          color: Colors.grey[500],
+                          color: isDark ? AppColors.textTertiaryDark : Colors.grey[500],
                         ),
                         const SizedBox(width: 4),
                         Text(
                           '${recipe.servings}人份',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[500],
+                            color: isDark ? AppColors.textTertiaryDark : Colors.grey[500],
                           ),
                         ),
                       ],
@@ -256,10 +265,13 @@ class _RecipeCard extends StatelessWidget {
         ),
       ),
       child: Center(
-        child: Icon(
-          Icons.restaurant_menu,
-          size: 40,
-          color: Colors.white.withAlpha(77),
+        child: Text(
+          recipe.name.isNotEmpty ? recipe.name.substring(0, 1) : '菜',
+          style: TextStyle(
+            fontSize: 36,
+            fontWeight: FontWeight.bold,
+            color: Colors.white.withAlpha(230),
+          ),
         ),
       ),
     );

@@ -61,7 +61,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: AppRoutes.favorites,
-            builder: (context, state) => const RecipeListScreen(),
+            builder: (context, state) => const RecipeListScreen(initialTabIndex: 0),
           ),
           GoRoute(
             path: AppRoutes.shopping,
@@ -101,7 +101,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: AppRoutes.recipes,
-            builder: (context, state) => const RecipeListScreen(),
+            builder: (context, state) => const RecipeListScreen(initialTabIndex: 1),
           ),
           GoRoute(
             path: AppRoutes.recipeDetail,

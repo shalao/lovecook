@@ -212,6 +212,8 @@ class _MoodChatScreenState extends ConsumerState<MoodChatScreen> {
   }
 
   Widget _buildInputArea(MoodChatState state) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: EdgeInsets.only(
         left: 16,
@@ -220,7 +222,7 @@ class _MoodChatScreenState extends ConsumerState<MoodChatScreen> {
         bottom: MediaQuery.of(context).padding.bottom + 8,
       ),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? AppColors.surfaceDark : Colors.white,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -233,7 +235,10 @@ class _MoodChatScreenState extends ConsumerState<MoodChatScreen> {
         children: [
           // 语音输入按钮
           IconButton(
-            icon: const Icon(Icons.mic),
+            icon: Icon(
+              Icons.mic,
+              color: isDark ? AppColors.textSecondaryDark : null,
+            ),
             onPressed: () {
               // TODO: 实现语音输入
               ScaffoldMessenger.of(context).showSnackBar(
@@ -247,10 +252,16 @@ class _MoodChatScreenState extends ConsumerState<MoodChatScreen> {
             child: TextField(
               controller: _inputController,
               focusNode: _focusNode,
+              style: TextStyle(
+                color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimary,
+              ),
               decoration: InputDecoration(
                 hintText: '说说今天想吃什么...',
+                hintStyle: TextStyle(
+                  color: isDark ? AppColors.textTertiaryDark : Colors.grey[500],
+                ),
                 filled: true,
-                fillColor: Colors.grey[100],
+                fillColor: isDark ? AppColors.inputBackgroundDark : Colors.grey[100],
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(24),
                   borderSide: BorderSide.none,
@@ -295,6 +306,7 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUser = message.isUser;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (message.isLoading) {
       return Padding(
@@ -302,12 +314,12 @@ class _ChatBubble extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildAvatar(isUser: false),
+            _buildAvatar(context, isUser: false),
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey[100],
+                color: isDark ? AppColors.inputBackgroundDark : Colors.grey[100],
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -318,14 +330,14 @@ class _ChatBubble extends StatelessWidget {
                     height: 16,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.grey[400],
+                      color: isDark ? AppColors.textTertiaryDark : Colors.grey[400],
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text(
                     '正在思考...',
                     style: TextStyle(
-                      color: Colors.grey[500],
+                      color: isDark ? AppColors.textTertiaryDark : Colors.grey[500],
                       fontSize: 14,
                     ),
                   ),
@@ -344,7 +356,7 @@ class _ChatBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isUser) ...[
-            _buildAvatar(isUser: false),
+            _buildAvatar(context, isUser: false),
             const SizedBox(width: 8),
           ],
           Flexible(
@@ -353,7 +365,7 @@ class _ChatBubble extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isUser
                     ? Theme.of(context).primaryColor
-                    : Colors.grey[100],
+                    : (isDark ? AppColors.inputBackgroundDark : Colors.grey[100]),
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
@@ -364,7 +376,9 @@ class _ChatBubble extends StatelessWidget {
               child: Text(
                 message.content,
                 style: TextStyle(
-                  color: isUser ? Colors.white : Colors.black87,
+                  color: isUser
+                      ? Colors.white
+                      : (isDark ? AppColors.textPrimaryDark : Colors.black87),
                   fontSize: 15,
                   height: 1.4,
                 ),
@@ -373,21 +387,26 @@ class _ChatBubble extends StatelessWidget {
           ),
           if (isUser) ...[
             const SizedBox(width: 8),
-            _buildAvatar(isUser: true),
+            _buildAvatar(context, isUser: true),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildAvatar({required bool isUser}) {
+  Widget _buildAvatar(BuildContext context, {required bool isUser}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return CircleAvatar(
       radius: 16,
-      backgroundColor: isUser ? Colors.blue[100] : Colors.green[100],
+      backgroundColor: isUser
+          ? (isDark ? Colors.blue[800] : Colors.blue[100])
+          : (isDark ? Colors.green[800] : Colors.green[100]),
       child: Icon(
         isUser ? Icons.person : Icons.restaurant,
         size: 18,
-        color: isUser ? Colors.blue[600] : Colors.green[600],
+        color: isUser
+            ? (isDark ? Colors.blue[200] : Colors.blue[600])
+            : (isDark ? Colors.green[200] : Colors.green[600]),
       ),
     );
   }

@@ -29,6 +29,7 @@ class GenerateMenuScreen extends ConsumerWidget {
   }
 
   Widget _buildGeneratingView(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -47,7 +48,7 @@ class GenerateMenuScreen extends ConsumerWidget {
           Text(
             'AI 正在根据您的家庭情况和库存食材\n精心规划营养均衡的菜单',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey.shade600),
+            style: TextStyle(color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600),
           ),
         ],
       ),
@@ -88,25 +89,31 @@ class GenerateMenuScreen extends ConsumerWidget {
               onAction: () => context.go('/settings'),
             ),
           if (state.error != null)
-            Container(
-              margin: const EdgeInsets.only(bottom: 16),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.error_outline, color: Colors.red.shade700),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      state.error!,
-                      style: TextStyle(color: Colors.red.shade700),
-                    ),
+            Builder(
+              builder: (context) {
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.red.withOpacity(0.15) : Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: isDark ? Border.all(color: Colors.red.withOpacity(0.4)) : null,
                   ),
-                ],
-              ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline, color: isDark ? Colors.red.shade300 : Colors.red.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          state.error!,
+                          style: TextStyle(color: isDark ? Colors.red.shade300 : Colors.red.shade700),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
 
           // 天数选择
@@ -257,14 +264,19 @@ class GenerateMenuScreen extends ConsumerWidget {
           ),
 
           const SizedBox(height: 16),
-          Center(
-            child: Text(
-              '菜单将根据家庭成员健康需求和库存食材智能生成',
-              style: TextStyle(
-                color: Colors.grey.shade500,
-                fontSize: 12,
-              ),
-            ),
+          Builder(
+            builder: (context) {
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              return Center(
+                child: Text(
+                  '菜单将根据家庭成员健康需求和库存食材智能生成',
+                  style: TextStyle(
+                    color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade500,
+                    fontSize: 12,
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -279,17 +291,18 @@ class GenerateMenuScreen extends ConsumerWidget {
     required String action,
     required VoidCallback onAction,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.orange.shade50,
+        color: isDark ? Colors.orange.withOpacity(0.15) : Colors.orange.shade50,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.shade200),
+        border: Border.all(color: isDark ? Colors.orange.withOpacity(0.4) : Colors.orange.shade200),
       ),
       child: Row(
         children: [
-          Icon(icon, color: Colors.orange.shade700, size: 32),
+          Icon(icon, color: isDark ? Colors.orange.shade300 : Colors.orange.shade700, size: 32),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -299,7 +312,7 @@ class GenerateMenuScreen extends ConsumerWidget {
                   title,
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: Colors.orange.shade800,
+                    color: isDark ? Colors.orange.shade300 : Colors.orange.shade800,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -307,7 +320,7 @@ class GenerateMenuScreen extends ConsumerWidget {
                   message,
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.orange.shade700,
+                    color: isDark ? Colors.orange.shade400 : Colors.orange.shade700,
                   ),
                 ),
               ],
@@ -488,6 +501,7 @@ class GenerateMenuScreen extends ConsumerWidget {
   Widget _buildShoppingListCard(BuildContext context, MenuPlanResult result) {
     if (result.shoppingList.isEmpty) return const SizedBox.shrink();
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
@@ -497,13 +511,14 @@ class GenerateMenuScreen extends ConsumerWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.shopping_cart, color: AppColors.primary),
+                Icon(Icons.shopping_cart, color: isDark ? AppColors.primaryDark : AppColors.primary),
                 const SizedBox(width: 8),
-                const Text(
+                Text(
                   '购物清单',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 16,
+                    color: isDark ? AppColors.textPrimaryDark : null,
                   ),
                 ),
               ],
@@ -516,15 +531,18 @@ class GenerateMenuScreen extends ConsumerWidget {
                       Icon(
                         Icons.check_circle_outline,
                         size: 18,
-                        color: Colors.grey.shade400,
+                        color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade400,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(item.name),
+                        child: Text(
+                          item.name,
+                          style: TextStyle(color: isDark ? AppColors.textPrimaryDark : null),
+                        ),
                       ),
                       Text(
                         '${item.quantity}${item.unit}',
-                        style: TextStyle(color: Colors.grey.shade600),
+                        style: TextStyle(color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600),
                       ),
                     ],
                   ),
@@ -534,8 +552,9 @@ class GenerateMenuScreen extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
+                  color: isDark ? Colors.blue.withOpacity(0.15) : Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(8),
+                  border: isDark ? Border.all(color: Colors.blue.withOpacity(0.4)) : null,
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -543,7 +562,7 @@ class GenerateMenuScreen extends ConsumerWidget {
                     Icon(
                       Icons.info_outline,
                       size: 18,
-                      color: Colors.blue.shade700,
+                      color: isDark ? Colors.blue.shade300 : Colors.blue.shade700,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -551,7 +570,7 @@ class GenerateMenuScreen extends ConsumerWidget {
                         result.nutritionSummary!,
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.blue.shade700,
+                          color: isDark ? Colors.blue.shade300 : Colors.blue.shade700,
                         ),
                       ),
                     ),
@@ -621,35 +640,40 @@ class _MealToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? AppColors.primaryDark : AppColors.primary;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: value ? AppColors.primary.withValues(alpha: 0.05) : null,
+        color: value ? primaryColor.withValues(alpha: 0.05) : null,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: value ? AppColors.primary.withValues(alpha: 0.3) : Colors.grey.shade200,
+          color: value
+              ? primaryColor.withValues(alpha: 0.3)
+              : (isDark ? AppColors.borderDark : Colors.grey.shade200),
         ),
       ),
       child: SwitchListTile(
         title: Row(
           children: [
-            Icon(icon, size: 20, color: value ? AppColors.primary : Colors.grey),
+            Icon(icon, size: 20, color: value ? primaryColor : (isDark ? AppColors.textTertiaryDark : Colors.grey)),
             const SizedBox(width: 8),
             Text(
               label,
               style: TextStyle(
                 fontWeight: value ? FontWeight.w600 : FontWeight.normal,
+                color: isDark ? AppColors.textPrimaryDark : null,
               ),
             ),
           ],
         ),
         subtitle: Text(
           subtitle,
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+          style: TextStyle(fontSize: 12, color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade500),
         ),
         value: value,
         onChanged: onChanged,
-        activeColor: AppColors.primary,
+        activeColor: primaryColor,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -689,14 +713,16 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? AppColors.primaryDark : AppColors.primary;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: isDark ? AppColors.surfaceDark : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(8),
         border: _isExpanded
-            ? Border.all(color: AppColors.primary.withValues(alpha: 0.3))
-            : null,
+            ? Border.all(color: primaryColor.withValues(alpha: 0.3))
+            : (isDark ? Border.all(color: AppColors.borderDark) : null),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -715,9 +741,10 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
                       Expanded(
                         child: Text(
                           widget.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 14,
+                            color: isDark ? AppColors.textPrimaryDark : null,
                           ),
                         ),
                       ),
@@ -726,7 +753,7 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
                             ? Icons.keyboard_arrow_up
                             : Icons.keyboard_arrow_down,
                         size: 20,
-                        color: Colors.grey.shade600,
+                        color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
                       ),
                     ],
                   ),
@@ -736,7 +763,7 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
                       widget.description,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey.shade600,
+                        color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
                       ),
                     ),
                   ],
@@ -747,14 +774,14 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
                         Icon(
                           Icons.schedule,
                           size: 14,
-                          color: Colors.grey.shade500,
+                          color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade500,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           '${widget.prepTime + widget.cookTime}分钟',
                           style: TextStyle(
                             fontSize: 11,
-                            color: Colors.grey.shade500,
+                            color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade500,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -764,7 +791,7 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
                           _isExpanded ? '收起详情' : '查看详情',
                           style: TextStyle(
                             fontSize: 11,
-                            color: AppColors.primary,
+                            color: primaryColor,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -793,14 +820,14 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.1),
+                          color: primaryColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
                           tag.toString(),
                           style: TextStyle(
                             fontSize: 10,
-                            color: AppColors.primary,
+                            color: primaryColor,
                           ),
                         ),
                       )).toList(),
@@ -811,14 +838,14 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
                   if (widget.ingredients.isNotEmpty) ...[
                     Row(
                       children: [
-                        Icon(Icons.restaurant_menu, size: 16, color: Colors.orange.shade700),
+                        Icon(Icons.restaurant_menu, size: 16, color: isDark ? Colors.orange.shade300 : Colors.orange.shade700),
                         const SizedBox(width: 4),
                         Text(
                           '食材',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 13,
-                            color: Colors.orange.shade700,
+                            color: isDark ? Colors.orange.shade300 : Colors.orange.shade700,
                           ),
                         ),
                       ],
@@ -837,14 +864,15 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.orange.shade50,
+                            color: isDark ? Colors.orange.withOpacity(0.15) : Colors.orange.shade50,
                             borderRadius: BorderRadius.circular(6),
+                            border: isDark ? Border.all(color: Colors.orange.withOpacity(0.3)) : null,
                           ),
                           child: Text(
                             '$name $quantity$unit',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.orange.shade800,
+                              color: isDark ? Colors.orange.shade300 : Colors.orange.shade800,
                             ),
                           ),
                         );
@@ -856,14 +884,14 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
                   if (widget.steps.isNotEmpty) ...[
                     Row(
                       children: [
-                        Icon(Icons.format_list_numbered, size: 16, color: Colors.blue.shade700),
+                        Icon(Icons.format_list_numbered, size: 16, color: isDark ? Colors.blue.shade300 : Colors.blue.shade700),
                         const SizedBox(width: 4),
                         Text(
                           '制作步骤',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 13,
-                            color: Colors.blue.shade700,
+                            color: isDark ? Colors.blue.shade300 : Colors.blue.shade700,
                           ),
                         ),
                       ],
@@ -879,7 +907,7 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
                             height: 20,
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: Colors.blue.shade100,
+                              color: isDark ? Colors.blue.withOpacity(0.2) : Colors.blue.shade100,
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
@@ -887,7 +915,7 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.blue.shade700,
+                                color: isDark ? Colors.blue.shade300 : Colors.blue.shade700,
                               ),
                             ),
                           ),
@@ -897,7 +925,7 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
                               entry.value.toString(),
                               style: TextStyle(
                                 fontSize: 13,
-                                color: Colors.grey.shade800,
+                                color: isDark ? AppColors.textPrimaryDark : Colors.grey.shade800,
                                 height: 1.4,
                               ),
                             ),
@@ -912,9 +940,9 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.amber.shade50,
+                        color: isDark ? Colors.amber.withOpacity(0.15) : Colors.amber.shade50,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.amber.shade200),
+                        border: Border.all(color: isDark ? Colors.amber.withOpacity(0.4) : Colors.amber.shade200),
                       ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -922,7 +950,7 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
                           Icon(
                             Icons.lightbulb_outline,
                             size: 16,
-                            color: Colors.amber.shade700,
+                            color: isDark ? Colors.amber.shade300 : Colors.amber.shade700,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -934,7 +962,7 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     fontSize: 12,
-                                    color: Colors.amber.shade800,
+                                    color: isDark ? Colors.amber.shade300 : Colors.amber.shade800,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -942,7 +970,7 @@ class _ExpandableRecipeCardState extends State<_ExpandableRecipeCard> {
                                   widget.tips,
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: Colors.amber.shade900,
+                                    color: isDark ? Colors.amber.shade200 : Colors.amber.shade900,
                                     height: 1.4,
                                   ),
                                 ),

@@ -192,6 +192,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   }
 
   Widget _buildEmptyState() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -199,21 +200,21 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
           Icon(
             Icons.kitchen_outlined,
             size: 80,
-            color: Colors.grey.shade400,
+            color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade400,
           ),
           const SizedBox(height: 16),
           Text(
             '还没有添加食材',
             style: TextStyle(
               fontSize: 18,
-              color: Colors.grey.shade600,
+              color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             '点击下方按钮添加食材',
             style: TextStyle(
-              color: Colors.grey.shade500,
+              color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade500,
             ),
           ),
         ],
@@ -507,26 +508,41 @@ class _IngredientListSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : null,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
+              color: isDark ? AppColors.textPrimaryDark : null,
             ),
           ),
           const SizedBox(height: 16),
           ...ingredients.map((ing) => ListTile(
                 leading: CircleAvatar(
-                  child: Text(ing.name.substring(0, 1)),
+                  backgroundColor: isDark ? AppColors.primaryDark.withOpacity(0.2) : null,
+                  child: Text(
+                    ing.name.substring(0, 1),
+                    style: TextStyle(color: isDark ? AppColors.primaryDark : null),
+                  ),
                 ),
-                title: Text(ing.name),
-                subtitle: Text(ing.quantityFormatted),
+                title: Text(
+                  ing.name,
+                  style: TextStyle(color: isDark ? AppColors.textPrimaryDark : null),
+                ),
+                subtitle: Text(
+                  ing.quantityFormatted,
+                  style: TextStyle(color: isDark ? AppColors.textSecondaryDark : null),
+                ),
               )),
         ],
       ),
@@ -559,6 +575,8 @@ class _IngredientDetailSheetState extends State<_IngredientDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? AppColors.primaryDark : AppColors.primary;
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
@@ -574,12 +592,12 @@ class _IngredientDetailSheetState extends State<_IngredientDetailSheet> {
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundColor: AppColors.primary.withOpacity(0.1),
+                backgroundColor: primaryColor.withOpacity(isDark ? 0.2 : 0.1),
                 child: Text(
                   widget.ingredient.name.substring(0, 1),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 20,
-                    color: AppColors.primary,
+                    color: primaryColor,
                   ),
                 ),
               ),
@@ -590,16 +608,17 @@ class _IngredientDetailSheetState extends State<_IngredientDetailSheet> {
                   children: [
                     Text(
                       widget.ingredient.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
+                        color: isDark ? AppColors.textPrimaryDark : null,
                       ),
                     ),
                     if (widget.ingredient.category != null)
                       Text(
                         widget.ingredient.category!,
                         style: TextStyle(
-                          color: Colors.grey.shade600,
+                          color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
                         ),
                       ),
                   ],
@@ -611,7 +630,7 @@ class _IngredientDetailSheetState extends State<_IngredientDetailSheet> {
           // 数量调整
           Row(
             children: [
-              const Text('数量', style: TextStyle(fontSize: 16)),
+              Text('数量', style: TextStyle(fontSize: 16, color: isDark ? AppColors.textPrimaryDark : null)),
               const Spacer(),
               IconButton(
                 icon: const Icon(Icons.remove_circle_outline),
@@ -686,16 +705,20 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
           Text(
             label,
-            style: TextStyle(color: Colors.grey.shade600),
+            style: TextStyle(color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600),
           ),
           const Spacer(),
-          Text(value),
+          Text(
+            value,
+            style: TextStyle(color: isDark ? AppColors.textPrimaryDark : null),
+          ),
         ],
       ),
     );

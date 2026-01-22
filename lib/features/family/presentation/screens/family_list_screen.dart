@@ -34,6 +34,7 @@ class FamilyListScreen extends ConsumerWidget {
   }
 
   Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -41,21 +42,21 @@ class FamilyListScreen extends ConsumerWidget {
           Icon(
             Icons.family_restroom,
             size: 80,
-            color: Colors.grey.shade400,
+            color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade400,
           ),
           const SizedBox(height: 16),
           Text(
             '还没有创建家庭',
             style: TextStyle(
               fontSize: 18,
-              color: Colors.grey.shade600,
+              color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             '点击下方按钮创建您的第一个家庭',
             style: TextStyle(
-              color: Colors.grey.shade500,
+              color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade500,
             ),
           ),
           const SizedBox(height: 24),
@@ -75,6 +76,8 @@ class FamilyListScreen extends ConsumerWidget {
     List<FamilyModel> families,
     FamilyModel? currentFamily,
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? AppColors.primaryDark : AppColors.primary;
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: families.length,
@@ -94,14 +97,14 @@ class FamilyListScreen extends ConsumerWidget {
                   CircleAvatar(
                     radius: 28,
                     backgroundColor: isCurrent
-                        ? AppColors.primary.withOpacity(0.2)
-                        : Colors.grey.shade200,
+                        ? primaryColor.withOpacity(isDark ? 0.25 : 0.2)
+                        : (isDark ? AppColors.inputBackgroundDark : Colors.grey.shade200),
                     child: Text(
                       family.name.substring(0, 1),
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: isCurrent ? AppColors.primary : Colors.grey,
+                        color: isCurrent ? primaryColor : (isDark ? AppColors.textSecondaryDark : Colors.grey),
                       ),
                     ),
                   ),
@@ -114,9 +117,10 @@ class FamilyListScreen extends ConsumerWidget {
                           children: [
                             Text(
                               family.name,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
+                                color: isDark ? AppColors.textPrimaryDark : null,
                               ),
                             ),
                             if (isCurrent)
@@ -127,14 +131,15 @@ class FamilyListScreen extends ConsumerWidget {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: AppColors.primary.withOpacity(0.1),
+                                  color: primaryColor.withOpacity(isDark ? 0.2 : 0.1),
                                   borderRadius: BorderRadius.circular(12),
+                                  border: isDark ? Border.all(color: primaryColor.withOpacity(0.4)) : null,
                                 ),
-                                child: const Text(
+                                child: Text(
                                   '当前',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: AppColors.primary,
+                                    color: primaryColor,
                                   ),
                                 ),
                               ),
@@ -144,7 +149,7 @@ class FamilyListScreen extends ConsumerWidget {
                         Text(
                           '${family.members.length} 位成员',
                           style: TextStyle(
-                            color: Colors.grey.shade600,
+                            color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
                           ),
                         ),
                       ],
@@ -163,7 +168,7 @@ class FamilyListScreen extends ConsumerWidget {
                       },
                       child: const Text('切换'),
                     ),
-                  const Icon(Icons.chevron_right),
+                  Icon(Icons.chevron_right, color: isDark ? AppColors.textSecondaryDark : null),
                 ],
               ),
             ),

@@ -54,12 +54,13 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(cookingProvider(widget.recipe));
     final notifier = ref.read(cookingProvider(widget.recipe).notifier);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: isDark ? AppColors.backgroundDark : Colors.grey.shade100,
       appBar: AppBar(
         title: Text(widget.recipe.name),
-        backgroundColor: Colors.white,
+        backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
         elevation: 0,
         actions: [
           // 计时器按钮
@@ -88,17 +89,17 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
               margin: const EdgeInsets.symmetric(horizontal: 16),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.shade50,
+                color: isDark ? Colors.red.withOpacity(0.15) : Colors.red.shade50,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+                  Icon(Icons.error_outline, color: isDark ? Colors.red.shade400 : Colors.red.shade700, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       state.error!,
-                      style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+                      style: TextStyle(color: isDark ? Colors.red.shade300 : Colors.red.shade700, fontSize: 13),
                     ),
                   ),
                   IconButton(
@@ -122,9 +123,10 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
   }
 
   Widget _buildStepProgress(CookingState state) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(16),
-      color: Colors.white,
+      color: isDark ? AppColors.surfaceDark : Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -132,16 +134,17 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
             children: [
               Text(
                 '步骤 ${state.currentStep + 1}/${state.totalSteps}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 16,
+                  color: isDark ? AppColors.textPrimaryDark : null,
                 ),
               ),
               const Spacer(),
               Text(
                 '${widget.recipe.totalTime}分钟',
                 style: TextStyle(
-                  color: Colors.grey.shade600,
+                  color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
                   fontSize: 13,
                 ),
               ),
@@ -150,8 +153,8 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
           const SizedBox(height: 8),
           LinearProgressIndicator(
             value: (state.currentStep + 1) / state.totalSteps,
-            backgroundColor: Colors.grey.shade200,
-            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+            backgroundColor: isDark ? AppColors.inputBackgroundDark : Colors.grey.shade200,
+            valueColor: AlwaysStoppedAnimation<Color>(isDark ? AppColors.primaryDark : AppColors.primary),
           ),
         ],
       ),
@@ -159,15 +162,16 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
   }
 
   Widget _buildStepContent(CookingState state, CookingNotifier notifier) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? AppColors.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -181,7 +185,7 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: AppColors.primary,
+              color: isDark ? AppColors.primaryDark : AppColors.primary,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Center(
@@ -201,9 +205,10 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
             child: SingleChildScrollView(
               child: Text(
                 state.currentStepText,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   height: 1.6,
+                  color: isDark ? AppColors.textPrimaryDark : null,
                 ),
               ),
             ),
@@ -231,11 +236,12 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
   }
 
   Widget _buildChatHistory(CookingState state) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       height: 120,
       margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? AppColors.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(12),
       ),
       child: ListView.builder(
@@ -256,11 +262,11 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
                 if (!isUser) ...[
                   CircleAvatar(
                     radius: 12,
-                    backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                    backgroundColor: (isDark ? AppColors.primaryDark : AppColors.primary).withValues(alpha: 0.1),
                     child: Icon(
                       Icons.restaurant,
                       size: 14,
-                      color: AppColors.primary,
+                      color: isDark ? AppColors.primaryDark : AppColors.primary,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -273,15 +279,17 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
                     ),
                     decoration: BoxDecoration(
                       color: isUser
-                          ? AppColors.primary.withValues(alpha: 0.1)
-                          : Colors.grey.shade100,
+                          ? (isDark ? AppColors.primaryDark : AppColors.primary).withValues(alpha: 0.1)
+                          : (isDark ? AppColors.inputBackgroundDark : Colors.grey.shade100),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       message.content,
                       style: TextStyle(
                         fontSize: 13,
-                        color: isUser ? AppColors.primary : Colors.grey.shade800,
+                        color: isUser
+                            ? (isDark ? AppColors.primaryDark : AppColors.primary)
+                            : (isDark ? AppColors.textPrimaryDark : Colors.grey.shade800),
                       ),
                     ),
                   ),
@@ -290,7 +298,7 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
                   const SizedBox(width: 8),
                   CircleAvatar(
                     radius: 12,
-                    backgroundColor: AppColors.primary,
+                    backgroundColor: isDark ? AppColors.primaryDark : AppColors.primary,
                     child: const Icon(
                       Icons.person,
                       size: 14,
@@ -307,30 +315,31 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
   }
 
   Widget _buildTimerDisplay() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.orange.shade50,
+        color: isDark ? Colors.orange.withOpacity(0.15) : Colors.orange.shade50,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.shade200),
+        border: Border.all(color: isDark ? Colors.orange.withOpacity(0.4) : Colors.orange.shade200),
       ),
       child: Row(
         children: [
-          Icon(Icons.timer, color: Colors.orange.shade700),
+          Icon(Icons.timer, color: isDark ? Colors.orange.shade400 : Colors.orange.shade700),
           const SizedBox(width: 12),
           Text(
             _formatTime(_remainingSeconds),
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: Colors.orange.shade700,
+              color: isDark ? Colors.orange.shade400 : Colors.orange.shade700,
               fontFamily: 'monospace',
             ),
           ),
           const Spacer(),
           IconButton(
-            icon: Icon(Icons.stop, color: Colors.orange.shade700),
+            icon: Icon(Icons.stop, color: isDark ? Colors.orange.shade400 : Colors.orange.shade700),
             onPressed: _stopTimer,
           ),
         ],
@@ -339,13 +348,14 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
   }
 
   Widget _buildBottomControls(CookingState state, CookingNotifier notifier) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? AppColors.surfaceDark : Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),
@@ -360,8 +370,8 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
               onPressed: state.isFirstStep ? null : () => notifier.previousStep(),
               icon: const Icon(Icons.chevron_left),
               style: IconButton.styleFrom(
-                backgroundColor: Colors.grey.shade100,
-                disabledBackgroundColor: Colors.grey.shade50,
+                backgroundColor: isDark ? AppColors.inputBackgroundDark : Colors.grey.shade100,
+                disabledBackgroundColor: isDark ? AppColors.inputBackgroundDark.withOpacity(0.5) : Colors.grey.shade50,
               ),
             ),
 
@@ -392,7 +402,7 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
                         ? Colors.red
                         : state.isProcessing
                             ? Colors.grey
-                            : AppColors.primary,
+                            : (isDark ? AppColors.primaryDark : AppColors.primary),
                     borderRadius: BorderRadius.circular(28),
                   ),
                   child: Center(
@@ -435,8 +445,8 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
               onPressed: state.isLastStep ? null : () => notifier.nextStep(),
               icon: const Icon(Icons.chevron_right),
               style: IconButton.styleFrom(
-                backgroundColor: Colors.grey.shade100,
-                disabledBackgroundColor: Colors.grey.shade50,
+                backgroundColor: isDark ? AppColors.inputBackgroundDark : Colors.grey.shade100,
+                disabledBackgroundColor: isDark ? AppColors.inputBackgroundDark.withOpacity(0.5) : Colors.grey.shade50,
               ),
             ),
           ],

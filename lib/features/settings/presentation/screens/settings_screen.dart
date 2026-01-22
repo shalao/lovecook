@@ -172,32 +172,37 @@ class SettingsScreen extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('避免重复推荐天数'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '系统会避免推荐这段时间内吃过的菜品',
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 16),
-            ...RecommendSettings.availableAvoidRecentDays.map((days) {
-              return RadioListTile<int>(
-                title: Text('$days 天'),
-                value: days,
-                groupValue: currentDays,
-                onChanged: (value) {
-                  if (value != null) {
-                    ref.read(avoidRecentDaysProvider.notifier).setDays(value);
-                    Navigator.pop(context);
-                  }
-                },
-              );
-            }),
-          ],
+        content: Builder(
+          builder: (context) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '系统会避免推荐这段时间内吃过的菜品',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ...RecommendSettings.availableAvoidRecentDays.map((days) {
+                  return RadioListTile<int>(
+                    title: Text('$days 天'),
+                    value: days,
+                    groupValue: currentDays,
+                    onChanged: (value) {
+                      if (value != null) {
+                        ref.read(avoidRecentDaysProvider.notifier).setDays(value);
+                        Navigator.pop(context);
+                      }
+                    },
+                  );
+                }),
+              ],
+            );
+          },
         ),
         actions: [
           TextButton(
@@ -277,12 +282,17 @@ class SettingsScreen extends ConsumerWidget {
                   },
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  '提示: 使用第三方 API 代理时，请修改 API 地址',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                Builder(
+                  builder: (context) {
+                    final isDark = Theme.of(context).brightness == Brightness.dark;
+                    return Text(
+                      '提示: 使用第三方 API 代理时，请修改 API 地址',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade600,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

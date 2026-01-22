@@ -333,12 +333,17 @@ class ProfileScreen extends ConsumerWidget {
                   },
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  '提示: 使用第三方 API 代理时，请修改 API 地址',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                Builder(
+                  builder: (context) {
+                    final isDark = Theme.of(context).brightness == Brightness.dark;
+                    return Text(
+                      '提示: 使用第三方 API 代理时，请修改 API 地址',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade600,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

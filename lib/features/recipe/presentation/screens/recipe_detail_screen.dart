@@ -91,10 +91,14 @@ class RecipeDetailScreen extends ConsumerWidget {
                   recipe.isFavorite ? Icons.bookmark : Icons.bookmark_border,
                   color: recipe.isFavorite ? Colors.amber : null,
                 ),
-                onPressed: () {
-                  ref.read(recipeRepositoryProvider).toggleFavorite(recipeId);
+                onPressed: () async {
+                  final currentFamily = ref.read(currentFamilyProvider);
+                  // 等待收藏操作完成后再刷新
+                  await ref.read(recipeRepositoryProvider).toggleFavorite(recipeId);
                   ref.invalidate(recipeByIdProvider(recipeId));
                   ref.invalidate(allRecipesProvider);
+                  // 刷新收藏列表，确保收藏状态同步
+                  ref.invalidate(favoriteRecipesProvider(currentFamily?.id));
                 },
               ),
             ],
@@ -867,6 +871,10 @@ class _CompleteCookingDialogState extends ConsumerState<_CompleteCookingDialog> 
       );
 
       if (mounted) {
+        // 在关闭对话框前获取引用，避免 context 失效
+        final scaffoldMessenger = ScaffoldMessenger.of(context);
+        final router = GoRouter.of(context);
+
         Navigator.pop(context);
 
         String message = '已记录「${widget.recipe.name}」为${_getMealTypeName(_selectedMealType)}';
@@ -879,16 +887,18 @@ class _CompleteCookingDialogState extends ConsumerState<_CompleteCookingDialog> 
           }
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text(message),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
             action: SnackBarAction(
               label: '查看日历',
               textColor: Colors.white,
               onPressed: () {
-                context.push(AppRoutes.mealCalendar);
+                scaffoldMessenger.hideCurrentSnackBar();
+                router.push(AppRoutes.mealCalendar);
               },
             ),
           ),

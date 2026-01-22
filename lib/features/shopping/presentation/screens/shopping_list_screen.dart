@@ -120,6 +120,7 @@ class _ShoppingListTab extends ConsumerWidget {
     final progress = list.progress;
     final purchased = list.purchasedCount;
     final total = list.totalItems;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -127,7 +128,7 @@ class _ShoppingListTab extends ConsumerWidget {
         color: Theme.of(context).colorScheme.surface,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(13),
+            color: Colors.black.withAlpha(isDark ? 40 : 13),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -142,16 +143,17 @@ class _ShoppingListTab extends ConsumerWidget {
                 '购物进度',
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.grey[600],
+                  color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
                 ),
               ),
               Row(
                 children: [
                   Text(
                     '$purchased / $total 项',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
+                      color: isDark ? AppColors.textPrimaryDark : null,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -172,7 +174,7 @@ class _ShoppingListTab extends ConsumerWidget {
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: progress,
-              backgroundColor: Colors.grey[200],
+              backgroundColor: isDark ? AppColors.inputBackgroundDark : Colors.grey[200],
               valueColor: AlwaysStoppedAnimation<Color>(
                 progress == 1.0 ? Colors.green : Theme.of(context).primaryColor,
               ),
@@ -206,6 +208,7 @@ class _InventoryTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final inventoryState = ref.watch(inventoryProvider);
     final ingredients = inventoryState.ingredients;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (ingredients.isEmpty) {
       return Column(
@@ -214,14 +217,14 @@ class _InventoryTab extends ConsumerWidget {
           Icon(
             Icons.inventory_2_outlined,
             size: 64,
-            color: Colors.grey[300],
+            color: isDark ? AppColors.textTertiaryDark : Colors.grey[300],
           ),
           const SizedBox(height: 16),
           Text(
             '家里还没有库存',
             style: TextStyle(
               fontSize: 16,
-              color: Colors.grey[600],
+              color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
             ),
           ),
           const SizedBox(height: 8),
@@ -229,7 +232,7 @@ class _InventoryTab extends ConsumerWidget {
             '点击下方按钮添加食材',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey[400],
+              color: isDark ? AppColors.textTertiaryDark : Colors.grey[400],
             ),
           ),
           const SizedBox(height: 24),
@@ -325,6 +328,7 @@ class _InventoryCategory extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -380,18 +384,23 @@ class _InventoryCategory extends StatelessWidget {
                   border: isLast
                       ? null
                       : Border(
-                          bottom: BorderSide(color: Colors.grey[200]!),
+                          bottom: BorderSide(color: isDark ? AppColors.borderDark : Colors.grey[200]!),
                         ),
                 ),
                 child: ListTile(
-                  title: Text(item.name),
+                  title: Text(
+                    item.name,
+                    style: TextStyle(
+                      color: isDark ? AppColors.textPrimaryDark : null,
+                    ),
+                  ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         '${item.remainingQuantity.toStringAsFixed(item.remainingQuantity.truncateToDouble() == item.remainingQuantity ? 0 : 1)}${item.unit}',
                         style: TextStyle(
-                          color: Colors.grey[600],
+                          color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -400,7 +409,7 @@ class _InventoryCategory extends StatelessWidget {
                         icon: Icon(
                           Icons.close,
                           size: 18,
-                          color: Colors.grey[400],
+                          color: isDark ? AppColors.textTertiaryDark : Colors.grey[400],
                         ),
                         onPressed: () => _confirmDelete(context, item),
                         padding: EdgeInsets.zero,
@@ -511,6 +520,7 @@ class _CategorySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -566,7 +576,7 @@ class _CategorySection extends StatelessWidget {
                   border: isLast
                       ? null
                       : Border(
-                          bottom: BorderSide(color: Colors.grey[200]!),
+                          bottom: BorderSide(color: isDark ? AppColors.borderDark : Colors.grey[200]!),
                         ),
                 ),
                 child: ListTile(
@@ -579,7 +589,7 @@ class _CategorySection extends StatelessWidget {
                         shape: BoxShape.circle,
                         color: item.purchased ? Colors.green : Colors.transparent,
                         border: Border.all(
-                          color: item.purchased ? Colors.green : Colors.grey[400]!,
+                          color: item.purchased ? Colors.green : (isDark ? AppColors.textTertiaryDark : Colors.grey[400]!),
                           width: 2,
                         ),
                       ),
@@ -596,13 +606,17 @@ class _CategorySection extends StatelessWidget {
                     item.name,
                     style: TextStyle(
                       decoration: item.purchased ? TextDecoration.lineThrough : null,
-                      color: item.purchased ? Colors.grey : null,
+                      color: item.purchased
+                          ? (isDark ? AppColors.textTertiaryDark : Colors.grey)
+                          : (isDark ? AppColors.textPrimaryDark : null),
                     ),
                   ),
                   trailing: Text(
                     item.quantityFormatted,
                     style: TextStyle(
-                      color: item.purchased ? Colors.grey : Colors.grey[600],
+                      color: item.purchased
+                          ? (isDark ? AppColors.textTertiaryDark : Colors.grey)
+                          : (isDark ? AppColors.textSecondaryDark : Colors.grey[600]),
                       fontWeight: FontWeight.w500,
                     ),
                   ),

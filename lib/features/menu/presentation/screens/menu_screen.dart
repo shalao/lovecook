@@ -33,7 +33,7 @@ class MenuScreen extends ConsumerWidget {
               ? _buildEmptyState(context)
               : _buildMenuList(context, ref, state),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push(AppRoutes.generateMenu),
+        onPressed: () => context.go(AppRoutes.recommend),
         icon: const Icon(Icons.auto_awesome),
         label: const Text('生成菜单'),
         backgroundColor: AppColors.primary,
@@ -75,6 +75,7 @@ class MenuScreen extends ConsumerWidget {
   }
 
   Widget _buildMenuList(BuildContext context, WidgetRef ref, MenuListState state) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: state.plans.length,
@@ -101,15 +102,17 @@ class MenuScreen extends ConsumerWidget {
                         ),
                         decoration: BoxDecoration(
                           color: isToday
-                              ? AppColors.primary.withValues(alpha: 0.1)
-                              : Colors.grey.shade100,
+                              ? (isDark ? AppColors.primaryDark : AppColors.primary).withValues(alpha: 0.1)
+                              : (isDark ? AppColors.inputBackgroundDark : Colors.grey.shade100),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           isToday ? '进行中' : '${plan.totalDays}天计划',
                           style: TextStyle(
                             fontSize: 12,
-                            color: isToday ? AppColors.primary : Colors.grey.shade600,
+                            color: isToday
+                                ? (isDark ? AppColors.primaryDark : AppColors.primary)
+                                : (isDark ? AppColors.textSecondaryDark : Colors.grey.shade600),
                             fontWeight: isToday ? FontWeight.w600 : null,
                           ),
                         ),
@@ -119,7 +122,7 @@ class MenuScreen extends ConsumerWidget {
                         _formatDateRange(plan.startDate, plan.endDate),
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey.shade500,
+                          color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade500,
                         ),
                       ),
                     ],
@@ -131,11 +134,11 @@ class MenuScreen extends ConsumerWidget {
                       '今日菜单',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade800,
+                        color: isDark ? AppColors.textPrimaryDark : Colors.grey.shade800,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    _buildTodayMeals(plan),
+                    _buildTodayMeals(context, plan),
                   ] else if (plan.notes != null && plan.notes!.isNotEmpty) ...[
                     Text(
                       plan.notes!,
@@ -143,7 +146,7 @@ class MenuScreen extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.grey.shade600,
+                        color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
                       ),
                     ),
                   ],
@@ -154,12 +157,12 @@ class MenuScreen extends ConsumerWidget {
                         '创建于 ${_formatDate(plan.createdAt)}',
                         style: TextStyle(
                           fontSize: 11,
-                          color: Colors.grey.shade400,
+                          color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade400,
                         ),
                       ),
                       const Spacer(),
                       IconButton(
-                        icon: Icon(Icons.delete_outline, size: 20, color: Colors.grey.shade400),
+                        icon: Icon(Icons.delete_outline, size: 20, color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade400),
                         onPressed: () => _confirmDelete(context, ref, plan.id),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
@@ -175,7 +178,8 @@ class MenuScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildTodayMeals(MealPlanModel plan) {
+  Widget _buildTodayMeals(BuildContext context, MealPlanModel plan) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final today = DateTime.now();
     final todayPlan = plan.days.firstWhere(
       (day) => _isSameDay(day.date, today),
@@ -187,7 +191,7 @@ class MenuScreen extends ConsumerWidget {
         '暂无安排',
         style: TextStyle(
           fontSize: 13,
-          color: Colors.grey.shade500,
+          color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade500,
         ),
       );
     }
@@ -199,7 +203,7 @@ class MenuScreen extends ConsumerWidget {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.grey.shade100,
+            color: isDark ? AppColors.inputBackgroundDark : Colors.grey.shade100,
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
@@ -209,7 +213,10 @@ class MenuScreen extends ConsumerWidget {
               const SizedBox(width: 4),
               Text(
                 meal.notes ?? meal.label,
-                style: const TextStyle(fontSize: 12),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? AppColors.textPrimaryDark : null,
+                ),
               ),
             ],
           ),
@@ -287,6 +294,7 @@ class _PlanDetailSheet extends ConsumerStatefulWidget {
 class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
       minChildSize: 0.5,
@@ -304,7 +312,7 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: isDark ? AppColors.borderDark : Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -315,9 +323,10 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
                 children: [
                   Text(
                     '${widget.plan.totalDays}天菜单计划',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
+                      color: isDark ? AppColors.textPrimaryDark : null,
                     ),
                   ),
                   const Spacer(),
@@ -325,7 +334,7 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
                     _formatDateRange(widget.plan.startDate, widget.plan.endDate),
                     style: TextStyle(
                       fontSize: 13,
-                      color: Colors.grey.shade500,
+                      color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade500,
                     ),
                   ),
                 ],
@@ -352,14 +361,19 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
 
   Widget _buildDayDetail(BuildContext context, DayPlanModel day) {
     final isToday = _isSameDay(day.date, DateTime.now());
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isToday ? AppColors.primary.withValues(alpha: 0.05) : Colors.grey.shade50,
+        color: isToday
+            ? (isDark ? AppColors.primaryDark : AppColors.primary).withValues(alpha: 0.05)
+            : (isDark ? AppColors.surfaceDark : Colors.grey.shade50),
         borderRadius: BorderRadius.circular(12),
-        border: isToday ? Border.all(color: AppColors.primary.withValues(alpha: 0.3)) : null,
+        border: isToday
+            ? Border.all(color: (isDark ? AppColors.primaryDark : AppColors.primary).withValues(alpha: 0.3))
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -370,7 +384,9 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
                 day.dateFormatted,
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
-                  color: isToday ? AppColors.primary : Colors.grey.shade800,
+                  color: isToday
+                      ? (isDark ? AppColors.primaryDark : AppColors.primary)
+                      : (isDark ? AppColors.textPrimaryDark : Colors.grey.shade800),
                 ),
               ),
               if (isToday) ...[
@@ -378,7 +394,7 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: AppColors.primary,
+                    color: isDark ? AppColors.primaryDark : AppColors.primary,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text(
@@ -399,7 +415,7 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
               '暂无安排',
               style: TextStyle(
                 fontSize: 13,
-                color: Colors.grey.shade500,
+                color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade500,
               ),
             )
           else
@@ -410,6 +426,7 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
   }
 
   Widget _buildMealRow(BuildContext context, DayPlanModel day, MealModel meal) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -423,9 +440,10 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
               children: [
                 Text(
                   meal.label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w500,
                     fontSize: 13,
+                    color: isDark ? AppColors.textPrimaryDark : null,
                   ),
                 ),
                 if (meal.notes != null && meal.notes!.isNotEmpty)
@@ -433,7 +451,7 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
                     meal.notes!,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey.shade600,
+                      color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
                     ),
                   ),
               ],
@@ -444,7 +462,7 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
             icon: Icon(
               Icons.swap_horiz,
               size: 20,
-              color: Colors.grey.shade500,
+              color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade500,
             ),
             onPressed: () => _showReplaceMealDialog(context, day, meal),
             padding: EdgeInsets.zero,
@@ -458,84 +476,90 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
 
   void _showReplaceMealDialog(BuildContext context, DayPlanModel day, MealModel meal) {
     final allRecipes = ref.read(allRecipesProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('替换${meal.label}'),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 400,
-          child: allRecipes.isEmpty
-              ? Center(
-                  child: Text(
-                    '暂无可用菜谱\n请先生成菜单或添加菜谱',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey.shade600),
-                  ),
-                )
-              : ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: allRecipes.length,
-                  itemBuilder: (context, index) {
-                    final recipe = allRecipes[index];
-                    final isCurrentRecipe = meal.recipeIds.contains(recipe.id);
-                    return ListTile(
-                      leading: recipe.imageUrl != null
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: Image.network(
-                                recipe.imageUrl!,
-                                width: 40,
-                                height: 40,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
+      builder: (dialogContext) {
+        final dialogIsDark = Theme.of(dialogContext).brightness == Brightness.dark;
+        return AlertDialog(
+          title: Text('替换${meal.label}'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: allRecipes.isEmpty
+                ? Center(
+                    child: Text(
+                      '暂无可用菜谱\n请先生成菜单或添加菜谱',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: dialogIsDark ? AppColors.textSecondaryDark : Colors.grey.shade600),
+                    ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: allRecipes.length,
+                    itemBuilder: (context, index) {
+                      final recipe = allRecipes[index];
+                      final isCurrentRecipe = meal.recipeIds.contains(recipe.id);
+                      return ListTile(
+                        leading: recipe.imageUrl != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: Image.network(
+                                  recipe.imageUrl!,
                                   width: 40,
                                   height: 40,
-                                  color: Colors.grey.shade200,
-                                  child: const Icon(Icons.restaurant_menu, size: 20),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    width: 40,
+                                    height: 40,
+                                    color: dialogIsDark ? AppColors.inputBackgroundDark : Colors.grey.shade200,
+                                    child: const Icon(Icons.restaurant_menu, size: 20),
+                                  ),
+                                ),
+                              )
+                            : Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: (dialogIsDark ? AppColors.primaryDark : AppColors.primary).withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Icon(
+                                  Icons.restaurant_menu,
+                                  size: 20,
+                                  color: dialogIsDark ? AppColors.primaryDark : AppColors.primary,
                                 ),
                               ),
-                            )
-                          : Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Icon(
-                                Icons.restaurant_menu,
-                                size: 20,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                      title: Text(
-                        recipe.name,
-                        style: TextStyle(
-                          fontWeight: isCurrentRecipe ? FontWeight.w600 : null,
-                          color: isCurrentRecipe ? AppColors.primary : null,
+                        title: Text(
+                          recipe.name,
+                          style: TextStyle(
+                            fontWeight: isCurrentRecipe ? FontWeight.w600 : null,
+                            color: isCurrentRecipe
+                                ? (dialogIsDark ? AppColors.primaryDark : AppColors.primary)
+                                : (dialogIsDark ? AppColors.textPrimaryDark : null),
+                          ),
                         ),
-                      ),
-                      subtitle: Text(
-                        '${recipe.totalTime}分钟 · ${recipe.servings}人份',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                      ),
-                      trailing: isCurrentRecipe
-                          ? Icon(Icons.check, color: AppColors.primary)
-                          : null,
-                      onTap: () => _replaceMeal(context, day, meal, recipe),
-                    );
-                  },
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+                        subtitle: Text(
+                          '${recipe.totalTime}分钟 · ${recipe.servings}人份',
+                          style: TextStyle(fontSize: 12, color: dialogIsDark ? AppColors.textTertiaryDark : Colors.grey.shade500),
+                        ),
+                        trailing: isCurrentRecipe
+                            ? Icon(Icons.check, color: dialogIsDark ? AppColors.primaryDark : AppColors.primary)
+                            : null,
+                        onTap: () => _replaceMeal(dialogContext, day, meal, recipe),
+                      );
+                    },
+                  ),
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+          ],
+        );
+      },
     );
   }
 

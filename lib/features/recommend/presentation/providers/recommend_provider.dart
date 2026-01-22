@@ -7,6 +7,8 @@ import '../../../family/data/repositories/family_repository.dart';
 import '../../../history/data/repositories/meal_history_repository.dart';
 import '../../../inventory/data/models/ingredient_model.dart';
 import '../../../inventory/presentation/providers/inventory_provider.dart';
+import '../../../menu/data/models/meal_plan_model.dart';
+import '../../../menu/data/repositories/meal_plan_repository.dart';
 import '../../../recipe/data/models/recipe_model.dart';
 import '../../../recipe/data/repositories/recipe_repository.dart';
 import '../../data/models/recommend_settings.dart';
@@ -187,6 +189,7 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
   final List<IngredientModel> _inventory;
   final MealHistoryRepository _historyRepository;
   final RecipeRepository _recipeRepository;
+  final MealPlanRepository _mealPlanRepository;
   final StorageService _storage;
 
   RecommendNotifier({
@@ -195,12 +198,14 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
     required List<IngredientModel> inventory,
     required MealHistoryRepository historyRepository,
     required RecipeRepository recipeRepository,
+    required MealPlanRepository mealPlanRepository,
     required StorageService storage,
   })  : _aiService = aiService,
         _currentFamily = currentFamily,
         _inventory = inventory,
         _historyRepository = historyRepository,
         _recipeRepository = recipeRepository,
+        _mealPlanRepository = mealPlanRepository,
         _storage = storage,
         super(RecommendState(
           settings: currentFamily != null
@@ -579,6 +584,88 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
   bool hasAllIngredients(RecipeModel recipe) {
     return getMissingIngredients(recipe).isEmpty;
   }
+
+  /// 保存当前推荐到菜单历史
+  Future<bool> saveToHistory() async {
+    if (_currentFamily == null || state.dayPlans.isEmpty) {
+      return false;
+    }
+
+    try {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      // 创建 MealPlanModel
+      final plan = MealPlanModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        familyId: _currentFamily!.id,
+        startDate: today,
+        endDate: today.add(Duration(days: state.dayPlans.length - 1)),
+        days: [],
+        createdAt: now,
+        notes: _buildNutritionSummary(),
+      );
+
+      // 转换 DayPlan 到 DayPlanModel
+      for (final dayPlan in state.dayPlans) {
+        final meals = <MealModel>[];
+
+        if (dayPlan.breakfast.recipes.isNotEmpty) {
+          meals.add(MealModel(
+            type: 'breakfast',
+            recipeIds: dayPlan.breakfast.recipes.map((r) => r.id).toList(),
+            notes: dayPlan.breakfast.recipes.map((r) => r.name).join('、'),
+          ));
+        }
+        if (dayPlan.lunch.recipes.isNotEmpty) {
+          meals.add(MealModel(
+            type: 'lunch',
+            recipeIds: dayPlan.lunch.recipes.map((r) => r.id).toList(),
+            notes: dayPlan.lunch.recipes.map((r) => r.name).join('、'),
+          ));
+        }
+        if (dayPlan.dinner.recipes.isNotEmpty) {
+          meals.add(MealModel(
+            type: 'dinner',
+            recipeIds: dayPlan.dinner.recipes.map((r) => r.id).toList(),
+            notes: dayPlan.dinner.recipes.map((r) => r.name).join('、'),
+          ));
+        }
+        if (dayPlan.snacks.recipes.isNotEmpty) {
+          meals.add(MealModel(
+            type: 'snack',
+            recipeIds: dayPlan.snacks.recipes.map((r) => r.id).toList(),
+            notes: dayPlan.snacks.recipes.map((r) => r.name).join('、'),
+          ));
+        }
+
+        plan.days.add(DayPlanModel(
+          date: dayPlan.date,
+          meals: meals,
+        ));
+      }
+
+      // 保存到 MealPlanRepository
+      await _mealPlanRepository.saveMealPlan(plan);
+      return true;
+    } catch (e) {
+      print('保存菜单历史失败: $e');
+      return false;
+    }
+  }
+
+  String? _buildNutritionSummary() {
+    final totalRecipes = state.dayPlans.fold<int>(
+      0,
+      (sum, day) =>
+          sum +
+          day.breakfast.recipes.length +
+          day.lunch.recipes.length +
+          day.dinner.recipes.length +
+          day.snacks.recipes.length,
+    );
+    return '${state.dayPlans.length}天计划，共$totalRecipes道菜';
+  }
 }
 
 /// 今日推荐 Provider
@@ -589,6 +676,7 @@ final recommendProvider =
   final inventoryState = ref.watch(inventoryProvider);
   final historyRepository = ref.watch(mealHistoryRepositoryProvider);
   final recipeRepository = ref.watch(recipeRepositoryProvider);
+  final mealPlanRepository = ref.watch(mealPlanRepositoryProvider);
   final storage = ref.watch(storageServiceProvider);
 
   return RecommendNotifier(
@@ -597,6 +685,7 @@ final recommendProvider =
     inventory: inventoryState.ingredients,
     historyRepository: historyRepository,
     recipeRepository: recipeRepository,
+    mealPlanRepository: mealPlanRepository,
     storage: storage,
   );
 });
