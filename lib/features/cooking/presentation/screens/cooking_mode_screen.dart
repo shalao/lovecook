@@ -1,0 +1,495 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../../core/theme/app_colors.dart';
+import '../../../recipe/data/models/recipe_model.dart';
+import '../providers/cooking_provider.dart';
+
+class CookingModeScreen extends ConsumerStatefulWidget {
+  final RecipeModel recipe;
+
+  const CookingModeScreen({super.key, required this.recipe});
+
+  @override
+  ConsumerState<CookingModeScreen> createState() => _CookingModeScreenState();
+}
+
+class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
+  Timer? _timer;
+  int _remainingSeconds = 0;
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startTimer(int seconds) {
+    _timer?.cancel();
+    setState(() => _remainingSeconds = seconds);
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_remainingSeconds > 0) {
+        setState(() => _remainingSeconds--);
+      } else {
+        timer.cancel();
+        // 可以添加提示音
+      }
+    });
+  }
+
+  void _stopTimer() {
+    _timer?.cancel();
+    setState(() => _remainingSeconds = 0);
+  }
+
+  String _formatTime(int seconds) {
+    final mins = seconds ~/ 60;
+    final secs = seconds % 60;
+    return '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(cookingProvider(widget.recipe));
+    final notifier = ref.read(cookingProvider(widget.recipe).notifier);
+
+    return Scaffold(
+      backgroundColor: Colors.grey.shade100,
+      appBar: AppBar(
+        title: Text(widget.recipe.name),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          // 计时器按钮
+          IconButton(
+            icon: const Icon(Icons.timer),
+            onPressed: () => _showTimerDialog(context),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // 步骤进度
+          _buildStepProgress(state),
+
+          // 当前步骤内容
+          Expanded(
+            child: _buildStepContent(state, notifier),
+          ),
+
+          // 对话历史
+          if (state.messages.isNotEmpty) _buildChatHistory(state),
+
+          // 错误提示
+          if (state.error != null)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      state.error!,
+                      style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: () => notifier.clearError(),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+
+          // 计时器显示
+          if (_remainingSeconds > 0) _buildTimerDisplay(),
+
+          // 底部控制栏
+          _buildBottomControls(state, notifier),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepProgress(CookingState state) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                '步骤 ${state.currentStep + 1}/${state.totalSteps}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${widget.recipe.totalTime}分钟',
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(
+            value: (state.currentStep + 1) / state.totalSteps,
+            backgroundColor: Colors.grey.shade200,
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepContent(CookingState state, CookingNotifier notifier) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 步骤编号
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Center(
+              child: Text(
+                '${state.currentStep + 1}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 步骤内容
+          Expanded(
+            child: SingleChildScrollView(
+              child: Text(
+                state.currentStepText,
+                style: const TextStyle(
+                  fontSize: 18,
+                  height: 1.6,
+                ),
+              ),
+            ),
+          ),
+
+          // 朗读按钮
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: state.isSpeaking
+                    ? () => notifier.stopSpeaking()
+                    : () => notifier.speakCurrentStep(),
+                icon: Icon(
+                  state.isSpeaking ? Icons.stop : Icons.volume_up,
+                  size: 18,
+                ),
+                label: Text(state.isSpeaking ? '停止' : '朗读'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChatHistory(CookingState state) {
+    return Container(
+      height: 120,
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ListView.builder(
+        padding: const EdgeInsets.all(12),
+        reverse: true,
+        itemCount: state.messages.length,
+        itemBuilder: (context, index) {
+          final message = state.messages[state.messages.length - 1 - index];
+          final isUser = message.type == MessageType.user;
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment:
+                  isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+              children: [
+                if (!isUser) ...[
+                  CircleAvatar(
+                    radius: 12,
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                    child: Icon(
+                      Icons.restaurant,
+                      size: 14,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isUser
+                          ? AppColors.primary.withValues(alpha: 0.1)
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      message.content,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isUser ? AppColors.primary : Colors.grey.shade800,
+                      ),
+                    ),
+                  ),
+                ),
+                if (isUser) ...[
+                  const SizedBox(width: 8),
+                  CircleAvatar(
+                    radius: 12,
+                    backgroundColor: AppColors.primary,
+                    child: const Icon(
+                      Icons.person,
+                      size: 14,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTimerDisplay() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.timer, color: Colors.orange.shade700),
+          const SizedBox(width: 12),
+          Text(
+            _formatTime(_remainingSeconds),
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.orange.shade700,
+              fontFamily: 'monospace',
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            icon: Icon(Icons.stop, color: Colors.orange.shade700),
+            onPressed: _stopTimer,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomControls(CookingState state, CookingNotifier notifier) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            // 上一步
+            IconButton(
+              onPressed: state.isFirstStep ? null : () => notifier.previousStep(),
+              icon: const Icon(Icons.chevron_left),
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.grey.shade100,
+                disabledBackgroundColor: Colors.grey.shade50,
+              ),
+            ),
+
+            const SizedBox(width: 8),
+
+            // 语音按钮
+            Expanded(
+              child: GestureDetector(
+                onLongPressStart: (_) {
+                  if (!state.isProcessing) {
+                    notifier.startRecording();
+                  }
+                },
+                onLongPressEnd: (_) {
+                  if (state.isRecording) {
+                    notifier.stopRecordingAndProcess();
+                  }
+                },
+                onLongPressCancel: () {
+                  if (state.isRecording) {
+                    notifier.cancelRecording();
+                  }
+                },
+                child: Container(
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: state.isRecording
+                        ? Colors.red
+                        : state.isProcessing
+                            ? Colors.grey
+                            : AppColors.primary,
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                  child: Center(
+                    child: state.isProcessing
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                state.isRecording ? Icons.mic : Icons.mic_none,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                state.isRecording ? '松开发送' : '按住说话',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(width: 8),
+
+            // 下一步
+            IconButton(
+              onPressed: state.isLastStep ? null : () => notifier.nextStep(),
+              icon: const Icon(Icons.chevron_right),
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.grey.shade100,
+                disabledBackgroundColor: Colors.grey.shade50,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTimerDialog(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '设置计时器',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildTimerChip(context, '30秒', 30),
+                _buildTimerChip(context, '1分钟', 60),
+                _buildTimerChip(context, '2分钟', 120),
+                _buildTimerChip(context, '3分钟', 180),
+                _buildTimerChip(context, '5分钟', 300),
+                _buildTimerChip(context, '10分钟', 600),
+                _buildTimerChip(context, '15分钟', 900),
+                _buildTimerChip(context, '30分钟', 1800),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimerChip(BuildContext context, String label, int seconds) {
+    return ActionChip(
+      label: Text(label),
+      onPressed: () {
+        Navigator.pop(context);
+        _startTimer(seconds);
+      },
+    );
+  }
+}
