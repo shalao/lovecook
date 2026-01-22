@@ -22,12 +22,14 @@ class RecipeListScreen extends ConsumerWidget {
     final currentFamily = ref.watch(currentFamilyProvider);
     final familyId = currentFamily?.id;
 
+    // 使用 key 强制 GoRouter 在不同路由间切换时重建 DefaultTabController
     return DefaultTabController(
+      key: ValueKey('recipe_tabs_$initialTabIndex'),
       length: 2,
       initialIndex: initialTabIndex,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('菜谱'),
+          title: Text(initialTabIndex == 0 ? '我的收藏' : '菜谱库'),
           bottom: const TabBar(
             tabs: [
               Tab(text: '收藏菜谱'),
@@ -100,18 +102,50 @@ class _RecipeGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.85,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-      ),
-      itemCount: recipes.length,
-      itemBuilder: (context, index) {
-        final recipe = recipes[index];
-        return _RecipeCard(recipe: recipe);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 响应式列数：根据屏幕宽度调整
+        // 移动端 (<600): 2 列
+        // 平板 (600-900): 3 列
+        // 桌面 (900-1200): 4 列
+        // 大屏 (>1200): 5 列
+        final width = constraints.maxWidth;
+        int crossAxisCount;
+        double childAspectRatio;
+        double spacing;
+
+        if (width < 600) {
+          crossAxisCount = 2;
+          childAspectRatio = 0.85;
+          spacing = 12;
+        } else if (width < 900) {
+          crossAxisCount = 3;
+          childAspectRatio = 0.85;
+          spacing = 16;
+        } else if (width < 1200) {
+          crossAxisCount = 4;
+          childAspectRatio = 0.9;
+          spacing = 20;
+        } else {
+          crossAxisCount = 5;
+          childAspectRatio = 0.9;
+          spacing = 24;
+        }
+
+        return GridView.builder(
+          padding: EdgeInsets.all(width < 600 ? 16 : 24),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            childAspectRatio: childAspectRatio,
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: spacing,
+          ),
+          itemCount: recipes.length,
+          itemBuilder: (context, index) {
+            final recipe = recipes[index];
+            return _RecipeCard(recipe: recipe);
+          },
+        );
       },
     );
   }
