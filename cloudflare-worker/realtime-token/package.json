@@ -1,0 +1,22 @@
+{
+  "name": "lovecook-realtime-token",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker for LoveCook OpenAI Realtime API token generation",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "keywords": [
+    "cloudflare",
+    "worker",
+    "openai",
+    "realtime"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^4.60.0"
+  }
+}

@@ -15,7 +15,6 @@ class GenerateMenuScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(menuGenerateProvider);
     final currentFamily = ref.watch(currentFamilyProvider);
-    final aiConfig = ref.watch(aiConfigProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -25,7 +24,7 @@ class GenerateMenuScreen extends ConsumerWidget {
           ? _buildGeneratingView(context)
           : state.result != null
               ? _buildResultView(context, ref, state)
-              : _buildSettingsView(context, ref, state, currentFamily, aiConfig),
+              : _buildSettingsView(context, ref, state, currentFamily),
     );
   }
 
@@ -61,7 +60,6 @@ class GenerateMenuScreen extends ConsumerWidget {
     WidgetRef ref,
     MenuGenerateState state,
     dynamic currentFamily,
-    AIConfig aiConfig,
   ) {
     final notifier = ref.read(menuGenerateProvider.notifier);
 
@@ -79,15 +77,6 @@ class GenerateMenuScreen extends ConsumerWidget {
               message: '需要设置家庭成员信息才能生成个性化菜单',
               action: '去创建',
               onAction: () => context.go('/family'),
-            ),
-          if (currentFamily != null && !aiConfig.isConfigured)
-            _buildWarningCard(
-              context,
-              icon: Icons.key,
-              title: 'API 密钥未配置',
-              message: '请在设置中配置 OpenAI API 密钥',
-              action: '去设置',
-              onAction: () => context.go('/settings'),
             ),
           if (state.error != null)
             Builder(
@@ -247,7 +236,7 @@ class GenerateMenuScreen extends ConsumerWidget {
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: currentFamily != null && aiConfig.isConfigured
+              onPressed: currentFamily != null
                   ? () => notifier.generateMenu()
                   : null,
               style: ElevatedButton.styleFrom(

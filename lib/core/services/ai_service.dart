@@ -1,74 +1,65 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../features/family/data/models/family_model.dart';
 import '../../features/inventory/data/models/ingredient_model.dart';
 import '../../features/recipe/data/models/recipe_model.dart';
+import 'ai_proxy_service.dart';
 import 'storage_service.dart';
 
-/// AI 服务配置 (OpenAI GPT)
+/// AI 服务配置 (简化版 - 无需 API Key)
 class AIConfig {
-  final String apiKey;
-  final String baseUrl;
   final String model;
   final String visionModel;
 
   const AIConfig({
-    required this.apiKey,
-    this.baseUrl = 'https://api.openai.com/v1',
     this.model = 'gpt-4o',
     this.visionModel = 'gpt-4o',
   });
 
-  bool get isConfigured => apiKey.isNotEmpty;
+  /// 始终返回 true，因为使用服务端代理
+  bool get isConfigured => true;
 
   AIConfig copyWith({
-    String? apiKey,
-    String? baseUrl,
     String? model,
     String? visionModel,
   }) {
     return AIConfig(
-      apiKey: apiKey ?? this.apiKey,
-      baseUrl: baseUrl ?? this.baseUrl,
       model: model ?? this.model,
       visionModel: visionModel ?? this.visionModel,
     );
   }
 }
 
-/// AI 配置通知器
+/// AI 配置通知器 (简化版)
 class AIConfigNotifier extends StateNotifier<AIConfig> {
   final StorageService _storage;
 
-  AIConfigNotifier(this._storage) : super(const AIConfig(apiKey: '')) {
+  AIConfigNotifier(this._storage) : super(const AIConfig()) {
     _loadConfig();
   }
 
   void _loadConfig() {
     final box = _storage.settingsBox;
-    final apiKey = box.get('ai_api_key', defaultValue: '') as String;
-    final baseUrl = box.get('ai_base_url', defaultValue: 'https://api.openai.com/v1') as String;
     final model = box.get('ai_model', defaultValue: 'gpt-4o') as String;
-    state = AIConfig(
-      apiKey: apiKey,
-      baseUrl: baseUrl,
-      model: model,
-      visionModel: model,
-    );
+    state = AIConfig(model: model, visionModel: model);
+
+    // 清理旧的 API Key 存储（迁移到服务端代理后不再需要）
+    _cleanupLegacySettings();
   }
 
-  Future<void> setApiKey(String apiKey) async {
-    await _storage.settingsBox.put('ai_api_key', apiKey);
-    state = state.copyWith(apiKey: apiKey);
-  }
-
-  Future<void> setBaseUrl(String baseUrl) async {
-    await _storage.settingsBox.put('ai_base_url', baseUrl);
-    state = state.copyWith(baseUrl: baseUrl);
+  /// 清理旧的设置项
+  Future<void> _cleanupLegacySettings() async {
+    final box = _storage.settingsBox;
+    if (box.containsKey('ai_api_key')) {
+      await box.delete('ai_api_key');
+    }
+    if (box.containsKey('ai_base_url')) {
+      await box.delete('ai_base_url');
+    }
   }
 
   Future<void> setModel(String model) async {
@@ -83,35 +74,25 @@ final aiConfigProvider = StateNotifierProvider<AIConfigNotifier, AIConfig>((ref)
   return AIConfigNotifier(storage);
 });
 
-/// AI 服务 (OpenAI GPT)
+/// AI 服务 (通过代理访问 OpenAI GPT)
 class AIService {
-  final Dio _dio;
+  final AiProxyService _proxyService;
   final AIConfig config;
 
-  AIService({required this.config})
-      : _dio = Dio(BaseOptions(
-          baseUrl: config.baseUrl,
-          headers: {
-            'Authorization': 'Bearer ${config.apiKey}',
-            'Content-Type': 'application/json',
-          },
-          connectTimeout: const Duration(seconds: 30),
-          receiveTimeout: const Duration(seconds: 120),
-        ));
+  AIService({
+    required AiProxyService proxyService,
+    required this.config,
+  }) : _proxyService = proxyService;
 
   /// 识别图片中的食材
   Future<List<IngredientRecognition>> recognizeIngredients(Uint8List imageBytes) async {
-    if (!config.isConfigured) {
-      throw AIServiceException('API 密钥未配置');
-    }
-
     final base64Image = base64Encode(imageBytes);
 
     try {
-      final response = await _dio.post('/chat/completions', data: {
-        'model': config.visionModel,
-        'max_tokens': 2048,
-        'messages': [
+      final response = await _proxyService.chatCompletions(
+        model: config.visionModel,
+        maxTokens: 2048,
+        messages: [
           {
             'role': 'system',
             'content': '你是一位专业的食材识别助手。请仔细分析图片中的食材，并以JSON格式返回结果。'
@@ -141,29 +122,25 @@ class AIService {
             ],
           },
         ],
-      });
+      );
 
-      final content = response.data['choices'][0]['message']['content'] as String;
+      final content = response['choices'][0]['message']['content'] as String;
       final jsonStr = _extractJson(content);
       final List<dynamic> items = json.decode(jsonStr);
 
       return items.map((item) => IngredientRecognition.fromJson(item)).toList();
-    } on DioException catch (e) {
-      throw AIServiceException('识别失败: ${_parseError(e)}');
+    } on AiProxyException catch (e) {
+      throw AIServiceException('识别失败: ${e.message}');
     }
   }
 
   /// 解析食材文字输入
   Future<List<IngredientRecognition>> parseIngredientText(String text) async {
-    if (!config.isConfigured) {
-      throw AIServiceException('API 密钥未配置');
-    }
-
     try {
-      final response = await _dio.post('/chat/completions', data: {
-        'model': config.model,
-        'max_tokens': 1024,
-        'messages': [
+      final response = await _proxyService.chatCompletions(
+        model: config.model,
+        maxTokens: 1024,
+        messages: [
           {
             'role': 'system',
             'content': '你是一位食材解析助手。请将用户描述的食材信息解析为结构化的JSON数据。'
@@ -184,35 +161,31 @@ class AIService {
 [{"name":"胡萝卜","quantity":3,"unit":"根","category":"蔬菜"}]''',
           },
         ],
-      });
+      );
 
-      final content = response.data['choices'][0]['message']['content'] as String;
+      final content = response['choices'][0]['message']['content'] as String;
       final jsonStr = _extractJson(content);
       final List<dynamic> items = json.decode(jsonStr);
 
       return items.map((item) => IngredientRecognition.fromJson(item)).toList();
-    } on DioException catch (e) {
-      throw AIServiceException('解析失败: ${_parseError(e)}');
+    } on AiProxyException catch (e) {
+      throw AIServiceException('解析失败: ${e.message}');
     }
   }
 
   /// 智能识别食材类别
   /// 当本地映射表无法匹配时，使用 AI 进行分类
   Future<String?> classifyIngredient(String ingredientName) async {
-    if (!config.isConfigured) {
-      return null; // API 未配置时静默返回 null
-    }
-
     if (ingredientName.isEmpty) {
       return null;
     }
 
     try {
-      final response = await _dio.post('/chat/completions', data: {
-        'model': config.model,
-        'max_tokens': 50,
-        'temperature': 0.1, // 低温度，确保结果稳定
-        'messages': [
+      final response = await _proxyService.chatCompletions(
+        model: config.model,
+        maxTokens: 50,
+        temperature: 0.1, // 低温度，确保结果稳定
+        messages: [
           {
             'role': 'system',
             'content': '''你是食材分类助手。根据食材名称返回其类别。
@@ -224,9 +197,9 @@ class AIService {
             'content': ingredientName,
           },
         ],
-      });
+      );
 
-      final content = response.data['choices'][0]['message']['content'] as String;
+      final content = response['choices'][0]['message']['content'] as String;
       final category = content.trim();
 
       // 验证返回的类别是否有效
@@ -240,7 +213,7 @@ class AIService {
       }
 
       return null;
-    } on DioException {
+    } on AiProxyException {
       return null; // 网络错误时静默返回 null
     } catch (e) {
       return null;
@@ -260,10 +233,6 @@ class AIService {
     List<String>? dislikedRecipes,
     List<String>? favoriteRecipes,
   }) async {
-    if (!config.isConfigured) {
-      throw AIServiceException('API 密钥未配置');
-    }
-
     // 构建家庭信息
     final familyInfo = _buildFamilyInfo(family);
     final inventoryInfo = _buildInventoryInfo(inventory);
@@ -281,11 +250,11 @@ class AIService {
     final maxTokens = 4096 + days * 2000;
 
     try {
-      final response = await _dio.post('/chat/completions', data: {
-        'model': config.model,
-        'max_tokens': maxTokens,
-        'temperature': 0.7,
-        'messages': [
+      final response = await _proxyService.chatCompletions(
+        model: config.model,
+        maxTokens: maxTokens,
+        temperature: 0.7,
+        messages: [
           {
             'role': 'system',
             'content': '''你是一位专业的家庭营养师和烹饪顾问。
@@ -360,15 +329,15 @@ $preferenceInfo
 注意：days数组必须有 $days 个元素，每天必须包含所有选择的餐次！只返回JSON。''',
           },
         ],
-      });
+      );
 
-      final content = response.data['choices'][0]['message']['content'] as String;
+      final content = response['choices'][0]['message']['content'] as String;
       final jsonStr = _extractJson(content);
       final data = json.decode(jsonStr) as Map<String, dynamic>;
 
       return MenuPlanResult.fromJson(data);
-    } on DioException catch (e) {
-      throw AIServiceException('生成菜单失败: ${_parseError(e)}');
+    } on AiProxyException catch (e) {
+      throw AIServiceException('生成菜单失败: ${e.message}');
     }
   }
 
@@ -378,19 +347,15 @@ $preferenceInfo
     required FamilyModel family,
     int count = 5,
   }) async {
-    if (!config.isConfigured) {
-      throw AIServiceException('API 密钥未配置');
-    }
-
     final inventoryInfo = _buildInventoryInfo(inventory);
     final familyInfo = _buildFamilyInfo(family);
 
     try {
-      final response = await _dio.post('/chat/completions', data: {
-        'model': config.model,
-        'max_tokens': 2048,
-        'temperature': 0.8,
-        'messages': [
+      final response = await _proxyService.chatCompletions(
+        model: config.model,
+        maxTokens: 2048,
+        temperature: 0.8,
+        messages: [
           {
             'role': 'system',
             'content': '你是一位创意家常菜专家。根据用户的食材库存和家庭情况，推荐适合的菜谱。'
@@ -423,15 +388,15 @@ $familyInfo
 优先推荐能充分利用现有食材的菜谱。只返回JSON数组。''',
           },
         ],
-      });
+      );
 
-      final content = response.data['choices'][0]['message']['content'] as String;
+      final content = response['choices'][0]['message']['content'] as String;
       final jsonStr = _extractJson(content);
       final List<dynamic> items = json.decode(jsonStr);
 
       return items.map((item) => _parseRecipe(item)).toList();
-    } on DioException catch (e) {
-      throw AIServiceException('推荐失败: ${_parseError(e)}');
+    } on AiProxyException catch (e) {
+      throw AIServiceException('推荐失败: ${e.message}');
     }
   }
 
@@ -440,17 +405,13 @@ $familyInfo
     required String dishName,
     required FamilyModel family,
   }) async {
-    if (!config.isConfigured) {
-      throw AIServiceException('API 密钥未配置');
-    }
-
     final familyInfo = _buildFamilyInfo(family);
 
     try {
-      final response = await _dio.post('/chat/completions', data: {
-        'model': config.model,
-        'max_tokens': 1024,
-        'messages': [
+      final response = await _proxyService.chatCompletions(
+        model: config.model,
+        maxTokens: 1024,
+        messages: [
           {
             'role': 'system',
             'content': '你是一位专业的家庭烹饪导师。请提供详细、实用的菜谱。'
@@ -482,15 +443,15 @@ $familyInfo
 根据家庭成员健康状况调整配方。只返回JSON。''',
           },
         ],
-      });
+      );
 
-      final content = response.data['choices'][0]['message']['content'] as String;
+      final content = response['choices'][0]['message']['content'] as String;
       final jsonStr = _extractJson(content);
       final data = json.decode(jsonStr) as Map<String, dynamic>;
 
       return _parseRecipe(data);
-    } on DioException catch (e) {
-      throw AIServiceException('生成菜谱失败: ${_parseError(e)}');
+    } on AiProxyException catch (e) {
+      throw AIServiceException('生成菜谱失败: ${e.message}');
     }
   }
 
@@ -500,10 +461,6 @@ $familyInfo
     required dynamic family,
     required List<dynamic> inventory,
   }) async {
-    if (!config.isConfigured) {
-      throw AIServiceException('API 密钥未配置');
-    }
-
     // 构建家庭和库存信息
     String familyInfo = '暂无家庭信息';
     String inventoryInfo = '暂无库存信息';
@@ -561,14 +518,14 @@ $inventoryInfo
     }
 
     try {
-      final response = await _dio.post('/chat/completions', data: {
-        'model': config.model,
-        'max_tokens': 1024,
-        'temperature': 0.8,
-        'messages': chatMessages,
-      });
+      final response = await _proxyService.chatCompletions(
+        model: config.model,
+        maxTokens: 1024,
+        temperature: 0.8,
+        messages: chatMessages,
+      );
 
-      final content = response.data['choices'][0]['message']['content'] as String;
+      final content = response['choices'][0]['message']['content'] as String;
 
       // 解析回复，检查是否包含JSON
       String reply = content;
@@ -595,26 +552,22 @@ $inventoryInfo
         extractedPreference: extractedPreference,
         suggestedDishes: suggestedDishes,
       );
-    } on DioException catch (e) {
-      throw AIServiceException('对话失败: ${_parseError(e)}');
+    } on AiProxyException catch (e) {
+      throw AIServiceException('对话失败: ${e.message}');
     }
   }
 
   /// 估算营养信息
   Future<NutritionInfoModel> analyzeNutrition(RecipeModel recipe) async {
-    if (!config.isConfigured) {
-      throw AIServiceException('API 密钥未配置');
-    }
-
     final ingredientsList = recipe.ingredients
         .map((i) => '${i.name} ${i.quantity}${i.unit}')
         .join('、');
 
     try {
-      final response = await _dio.post('/chat/completions', data: {
-        'model': config.model,
-        'max_tokens': 512,
-        'messages': [
+      final response = await _proxyService.chatCompletions(
+        model: config.model,
+        maxTokens: 512,
+        messages: [
           {
             'role': 'system',
             'content': '你是一位营养师。请估算菜品的营养信息。数据仅供参考，不代替专业医生建议。'
@@ -633,9 +586,9 @@ $inventoryInfo
 只返回JSON。''',
           },
         ],
-      });
+      );
 
-      final content = response.data['choices'][0]['message']['content'] as String;
+      final content = response['choices'][0]['message']['content'] as String;
       final jsonStr = _extractJson(content);
       final data = json.decode(jsonStr) as Map<String, dynamic>;
 
@@ -647,8 +600,8 @@ $inventoryInfo
         fiber: (data['fiber'] as num?)?.toDouble(),
         summary: data['summary'] as String?,
       );
-    } on DioException catch (e) {
-      throw AIServiceException('分析失败: ${_parseError(e)}');
+    } on AiProxyException catch (e) {
+      throw AIServiceException('分析失败: ${e.message}');
     }
   }
 
@@ -753,40 +706,23 @@ $inventoryInfo
     return cleaned;
   }
 
-  String _parseError(DioException e) {
-    if (e.response?.data != null) {
-      final data = e.response!.data;
-      if (data is Map && data['error'] != null) {
-        final error = data['error'];
-        if (error is Map && error['message'] != null) {
-          return error['message'] as String;
-        }
-      }
-    }
-    return e.message ?? '网络请求失败';
-  }
-
   /// 通用聊天完成接口
   Future<String> chatCompletion({
     required List<Map<String, dynamic>> messages,
     int maxTokens = 500,
     double temperature = 0.7,
   }) async {
-    if (!config.isConfigured) {
-      throw AIServiceException('API 密钥未配置');
-    }
-
     try {
-      final response = await _dio.post('/chat/completions', data: {
-        'model': config.model,
-        'max_tokens': maxTokens,
-        'temperature': temperature,
-        'messages': messages,
-      });
+      final response = await _proxyService.chatCompletions(
+        model: config.model,
+        maxTokens: maxTokens,
+        temperature: temperature,
+        messages: messages,
+      );
 
-      return response.data['choices'][0]['message']['content'] as String;
-    } on DioException catch (e) {
-      throw AIServiceException('请求失败: ${_parseError(e)}');
+      return response['choices'][0]['message']['content'] as String;
+    } on AiProxyException catch (e) {
+      throw AIServiceException('请求失败: ${e.message}');
     }
   }
 
@@ -832,8 +768,9 @@ $inventoryInfo
 
 /// AI 服务 Provider
 final aiServiceProvider = Provider<AIService>((ref) {
+  final proxyService = ref.watch(aiProxyServiceProvider);
   final config = ref.watch(aiConfigProvider);
-  return AIService(config: config);
+  return AIService(proxyService: proxyService, config: config);
 });
 
 /// AI 服务异常

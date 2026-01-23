@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/services/realtime_voice_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../providers/mood_chat_provider.dart';
 import '../providers/recommend_provider.dart';
@@ -213,6 +214,7 @@ class _MoodChatScreenState extends ConsumerState<MoodChatScreen> {
 
   Widget _buildInputArea(MoodChatState state) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final notifier = ref.read(moodChatProvider.notifier);
 
     return Container(
       padding: EdgeInsets.only(
@@ -231,68 +233,253 @@ class _MoodChatScreenState extends ConsumerState<MoodChatScreen> {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // 语音输入按钮
-          IconButton(
-            icon: Icon(
-              Icons.mic,
-              color: isDark ? AppColors.textSecondaryDark : null,
-            ),
-            onPressed: () {
-              // TODO: 实现语音输入
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('语音输入功能开发中...')),
-              );
-            },
-            tooltip: '语音输入',
-          ),
-          // 文字输入框
-          Expanded(
-            child: TextField(
-              controller: _inputController,
-              focusNode: _focusNode,
-              style: TextStyle(
-                color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimary,
+          // 语音模式切换
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildModeChip(
+                '文字输入',
+                Icons.keyboard,
+                state.voiceMode == VoiceInputMode.text,
+                () => notifier.setVoiceMode(VoiceInputMode.text),
               ),
-              decoration: InputDecoration(
-                hintText: '说说今天想吃什么...',
-                hintStyle: TextStyle(
-                  color: isDark ? AppColors.textTertiaryDark : Colors.grey[500],
-                ),
-                filled: true,
-                fillColor: isDark ? AppColors.inputBackgroundDark : Colors.grey[100],
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
+              const SizedBox(width: 8),
+              _buildModeChip(
+                '实时语音',
+                Icons.surround_sound,
+                state.voiceMode == VoiceInputMode.realtime,
+                () => notifier.setVoiceMode(VoiceInputMode.realtime),
               ),
-              maxLines: 1,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => _sendMessage(),
-            ),
+            ],
           ),
-          const SizedBox(width: 8),
-          // 发送按钮
-          IconButton(
-            icon: state.isLoading
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.send),
-            onPressed: state.isLoading ? null : _sendMessage,
-            style: IconButton.styleFrom(
-              backgroundColor: Theme.of(context).primaryColor,
-              foregroundColor: Colors.white,
-            ),
-          ),
+          const SizedBox(height: 8),
+          // 根据模式显示不同的输入区
+          state.isRealtimeMode
+              ? _buildRealtimeInputArea(state, notifier)
+              : _buildTextInputArea(state),
         ],
+      ),
+    );
+  }
+
+  /// 模式选择 Chip
+  Widget _buildModeChip(
+    String label,
+    IconData icon,
+    bool isSelected,
+    VoidCallback onTap,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Theme.of(context).primaryColor
+              : (isDark ? AppColors.inputBackgroundDark : Colors.grey.shade100),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected
+                  ? Colors.white
+                  : (isDark ? AppColors.textSecondaryDark : Colors.grey.shade600),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: isSelected
+                    ? Colors.white
+                    : (isDark ? AppColors.textSecondaryDark : Colors.grey.shade600),
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 文字输入区
+  Widget _buildTextInputArea(MoodChatState state) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Row(
+      children: [
+        // 文字输入框
+        Expanded(
+          child: TextField(
+            controller: _inputController,
+            focusNode: _focusNode,
+            style: TextStyle(
+              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimary,
+            ),
+            decoration: InputDecoration(
+              hintText: '说说今天想吃什么...',
+              hintStyle: TextStyle(
+                color: isDark ? AppColors.textTertiaryDark : Colors.grey[500],
+              ),
+              filled: true,
+              fillColor: isDark ? AppColors.inputBackgroundDark : Colors.grey[100],
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(24),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 10,
+              ),
+            ),
+            maxLines: 1,
+            textInputAction: TextInputAction.send,
+            onSubmitted: (_) => _sendMessage(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // 发送按钮
+        IconButton(
+          icon: state.isLoading
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.send),
+          onPressed: state.isLoading ? null : _sendMessage,
+          style: IconButton.styleFrom(
+            backgroundColor: Theme.of(context).primaryColor,
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 实时语音输入区
+  Widget _buildRealtimeInputArea(MoodChatState state, MoodChatNotifier notifier) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // 连接中
+    if (state.isRealtimeConnecting) {
+      return Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: Colors.orange,
+          borderRadius: BorderRadius.circular(28),
+        ),
+        child: const Center(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 8),
+              Text(
+                '连接中...',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // 已连接
+    if (state.isRealtimeConnected) {
+      return GestureDetector(
+        onTap: () => notifier.toggleRealtimeMute(),
+        child: Container(
+          height: 56,
+          decoration: BoxDecoration(
+            color: state.isSpeaking
+                ? Colors.green
+                : state.isRealtimeListening
+                    ? Theme.of(context).primaryColor
+                    : Colors.grey,
+            borderRadius: BorderRadius.circular(28),
+          ),
+          child: Center(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (state.isSpeaking) ...[
+                  const Icon(Icons.graphic_eq, color: Colors.white),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'AI 正在回复...',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ] else ...[
+                  Icon(
+                    state.isRealtimeListening ? Icons.mic : Icons.mic_off,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    state.isRealtimeListening ? '正在聆听...' : '已静音（点击开启）',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 未连接或错误
+    return GestureDetector(
+      onTap: () => notifier.connectRealtime(),
+      child: Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: state.realtimeState == RealtimeSessionState.error
+              ? Colors.red
+              : (isDark ? AppColors.primaryDark : AppColors.primary),
+          borderRadius: BorderRadius.circular(28),
+        ),
+        child: Center(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.play_arrow, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(
+                state.realtimeState == RealtimeSessionState.error
+                    ? '重新连接'
+                    : '开始实时对话',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -1,0 +1,5 @@
+name = "lovecook-realtime-token"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# OPENAI_API_KEY 通过 wrangler secret put OPENAI_API_KEY 设置

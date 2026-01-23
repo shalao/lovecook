@@ -7,6 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../recipe/data/models/recipe_model.dart';
 import '../../../recipe/data/repositories/recipe_repository.dart';
 import '../../data/models/recommend_settings.dart';
+import '../providers/mood_chat_provider.dart';
 import '../providers/recommend_provider.dart';
 
 class RecommendScreen extends ConsumerStatefulWidget {
@@ -465,16 +466,15 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
           ),
         ),
         const SizedBox(width: 8),
-        // 语音按钮
+        // 实时语音按钮
         IconButton(
-          icon: const Icon(Icons.mic),
+          icon: const Icon(Icons.surround_sound),
           onPressed: () {
-            // TODO: 实现语音输入
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('语音输入功能开发中...')),
-            );
+            // 跳转到聊天页面并启用实时语音模式
+            ref.read(moodChatProvider.notifier).setVoiceMode(VoiceInputMode.realtime);
+            context.push(AppRoutes.moodChat);
           },
-          tooltip: '语音输入',
+          tooltip: '实时语音对话',
           style: IconButton.styleFrom(
             backgroundColor: inputBgColor,
             foregroundColor: isDark ? AppColors.textPrimaryDark : null,

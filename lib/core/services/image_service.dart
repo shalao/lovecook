@@ -1,7 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
-import 'ai_service.dart';
+import 'ai_proxy_service.dart';
 
 /// 图片服务配置
 class ImageServiceConfig {
@@ -20,12 +21,13 @@ class ImageServiceConfig {
 class ImageService {
   final Dio _dio;
   final ImageServiceConfig config;
-  final AIConfig? aiConfig;
+  final AiProxyService _proxyService;
 
   ImageService({
     required this.config,
-    this.aiConfig,
-  }) : _dio = Dio(BaseOptions(
+    required AiProxyService proxyService,
+  })  : _proxyService = proxyService,
+        _dio = Dio(BaseOptions(
           connectTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 30),
         ));
@@ -60,8 +62,8 @@ class ImageService {
       }
     }
 
-    // 如果启用了 DALL-E 且有 AI 配置
-    if (config.useDallE && aiConfig != null && aiConfig!.isConfigured) {
+    // 如果启用了 DALL-E，使用代理服务生成图片
+    if (config.useDallE) {
       return await generateFoodImage(dishName);
     }
 
@@ -69,36 +71,19 @@ class ImageService {
     return _getPlaceholderImage(dishName);
   }
 
-  /// 使用 DALL-E 生成菜品图片
+  /// 使用 DALL-E 生成菜品图片（通过代理服务）
   Future<String?> generateFoodImage(String dishName) async {
-    if (aiConfig == null || !aiConfig!.isConfigured) return null;
-
     try {
-      final dio = Dio(BaseOptions(
-        baseUrl: aiConfig!.baseUrl,
-        headers: {
-          'Authorization': 'Bearer ${aiConfig!.apiKey}',
-          'Content-Type': 'application/json',
-        },
-      ));
-
-      final response = await dio.post('/images/generations', data: {
-        'model': 'dall-e-3',
-        'prompt': '一道精美的中式家常菜：$dishName，摆盘精致，自然光线，美食摄影风格，高清',
-        'n': 1,
-        'size': '1024x1024',
-        'quality': 'standard',
-      });
-
-      final data = response.data['data'] as List;
-      if (data.isNotEmpty) {
-        return data[0]['url'] as String;
-      }
-    } catch (e) {
+      return await _proxyService.imageGeneration(
+        prompt: '一道精美的中式家常菜：$dishName，摆盘精致，自然光线，美食摄影风格，高清',
+        model: 'dall-e-3',
+        size: '1024x1024',
+        quality: 'standard',
+      );
+    } on AiProxyException {
       // DALL-E 生成失败
+      return null;
     }
-
-    return null;
   }
 
   /// 获取占位图（基于菜名的稳定哈希）
@@ -128,6 +113,6 @@ final imageServiceConfigProvider = StateProvider<ImageServiceConfig>((ref) {
 /// 图片服务 Provider
 final imageServiceProvider = Provider<ImageService>((ref) {
   final config = ref.watch(imageServiceConfigProvider);
-  final aiConfig = ref.watch(aiConfigProvider);
-  return ImageService(config: config, aiConfig: aiConfig);
+  final proxyService = ref.watch(aiProxyServiceProvider);
+  return ImageService(config: config, proxyService: proxyService);
 });

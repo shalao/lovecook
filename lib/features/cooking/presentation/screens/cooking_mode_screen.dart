@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/services/realtime_voice_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../recipe/data/models/recipe_model.dart';
 import '../providers/cooking_provider.dart';
@@ -363,93 +364,295 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
       ),
       child: SafeArea(
         top: false,
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // 上一步
-            IconButton(
-              onPressed: state.isFirstStep ? null : () => notifier.previousStep(),
-              icon: const Icon(Icons.chevron_left),
-              style: IconButton.styleFrom(
-                backgroundColor: isDark ? AppColors.inputBackgroundDark : Colors.grey.shade100,
-                disabledBackgroundColor: isDark ? AppColors.inputBackgroundDark.withOpacity(0.5) : Colors.grey.shade50,
-              ),
+            // 语音模式切换
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildVoiceModeChip(
+                  context,
+                  '按住说话',
+                  Icons.touch_app,
+                  state.voiceMode == VoiceMode.pushToTalk,
+                  () => notifier.setVoiceMode(VoiceMode.pushToTalk),
+                ),
+                const SizedBox(width: 8),
+                _buildVoiceModeChip(
+                  context,
+                  '实时对话',
+                  Icons.surround_sound,
+                  state.voiceMode == VoiceMode.realtime,
+                  () => notifier.setVoiceMode(VoiceMode.realtime),
+                ),
+              ],
             ),
-
-            const SizedBox(width: 8),
-
-            // 语音按钮
-            Expanded(
-              child: GestureDetector(
-                onLongPressStart: (_) {
-                  if (!state.isProcessing) {
-                    notifier.startRecording();
-                  }
-                },
-                onLongPressEnd: (_) {
-                  if (state.isRecording) {
-                    notifier.stopRecordingAndProcess();
-                  }
-                },
-                onLongPressCancel: () {
-                  if (state.isRecording) {
-                    notifier.cancelRecording();
-                  }
-                },
-                child: Container(
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: state.isRecording
-                        ? Colors.red
-                        : state.isProcessing
-                            ? Colors.grey
-                            : (isDark ? AppColors.primaryDark : AppColors.primary),
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  child: Center(
-                    child: state.isProcessing
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                state.isRecording ? Icons.mic : Icons.mic_none,
-                                color: Colors.white,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                state.isRecording ? '松开发送' : '按住说话',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
+            const SizedBox(height: 12),
+            // 主控制区
+            Row(
+              children: [
+                // 上一步
+                IconButton(
+                  onPressed: state.isFirstStep ? null : () => notifier.previousStep(),
+                  icon: const Icon(Icons.chevron_left),
+                  style: IconButton.styleFrom(
+                    backgroundColor: isDark ? AppColors.inputBackgroundDark : Colors.grey.shade100,
+                    disabledBackgroundColor: isDark ? AppColors.inputBackgroundDark.withOpacity(0.5) : Colors.grey.shade50,
                   ),
                 ),
-              ),
+
+                const SizedBox(width: 8),
+
+                // 语音按钮（根据模式显示不同 UI）
+                Expanded(
+                  child: state.isRealtimeMode
+                      ? _buildRealtimeVoiceButton(state, notifier)
+                      : _buildPushToTalkButton(state, notifier),
+                ),
+
+                const SizedBox(width: 8),
+
+                // 下一步
+                IconButton(
+                  onPressed: state.isLastStep ? null : () => notifier.nextStep(),
+                  icon: const Icon(Icons.chevron_right),
+                  style: IconButton.styleFrom(
+                    backgroundColor: isDark ? AppColors.inputBackgroundDark : Colors.grey.shade100,
+                    disabledBackgroundColor: isDark ? AppColors.inputBackgroundDark.withOpacity(0.5) : Colors.grey.shade50,
+                  ),
+                ),
+              ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
 
-            const SizedBox(width: 8),
-
-            // 下一步
-            IconButton(
-              onPressed: state.isLastStep ? null : () => notifier.nextStep(),
-              icon: const Icon(Icons.chevron_right),
-              style: IconButton.styleFrom(
-                backgroundColor: isDark ? AppColors.inputBackgroundDark : Colors.grey.shade100,
-                disabledBackgroundColor: isDark ? AppColors.inputBackgroundDark.withOpacity(0.5) : Colors.grey.shade50,
+  /// 语音模式选择 Chip
+  Widget _buildVoiceModeChip(
+    BuildContext context,
+    String label,
+    IconData icon,
+    bool isSelected,
+    VoidCallback onTap,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark ? AppColors.primaryDark : AppColors.primary)
+              : (isDark ? AppColors.inputBackgroundDark : Colors.grey.shade100),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected
+                  ? Colors.white
+                  : (isDark ? AppColors.textSecondaryDark : Colors.grey.shade600),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: isSelected
+                    ? Colors.white
+                    : (isDark ? AppColors.textSecondaryDark : Colors.grey.shade600),
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// 按住说话按钮
+  Widget _buildPushToTalkButton(CookingState state, CookingNotifier notifier) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return GestureDetector(
+      onLongPressStart: (_) {
+        if (!state.isProcessing) {
+          notifier.startRecording();
+        }
+      },
+      onLongPressEnd: (_) {
+        if (state.isRecording) {
+          notifier.stopRecordingAndProcess();
+        }
+      },
+      onLongPressCancel: () {
+        if (state.isRecording) {
+          notifier.cancelRecording();
+        }
+      },
+      child: Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: state.isRecording
+              ? Colors.red
+              : state.isProcessing
+                  ? Colors.grey
+                  : (isDark ? AppColors.primaryDark : AppColors.primary),
+          borderRadius: BorderRadius.circular(28),
+        ),
+        child: Center(
+          child: state.isProcessing
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      state.isRecording ? Icons.mic : Icons.mic_none,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      state.isRecording ? '松开发送' : '按住说话',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+
+  /// 实时语音按钮
+  Widget _buildRealtimeVoiceButton(CookingState state, CookingNotifier notifier) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // 连接中
+    if (state.isRealtimeConnecting) {
+      return Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: Colors.orange,
+          borderRadius: BorderRadius.circular(28),
+        ),
+        child: const Center(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 8),
+              Text(
+                '连接中...',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // 已连接
+    if (state.isRealtimeConnected) {
+      return GestureDetector(
+        onTap: () => notifier.toggleRealtimeMute(),
+        child: Container(
+          height: 56,
+          decoration: BoxDecoration(
+            color: state.isSpeaking
+                ? Colors.green
+                : state.isRealtimeListening
+                    ? (isDark ? AppColors.primaryDark : AppColors.primary)
+                    : Colors.grey,
+            borderRadius: BorderRadius.circular(28),
+          ),
+          child: Center(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // 语音波形动画（简化版）
+                if (state.isSpeaking) ...[
+                  const Icon(Icons.graphic_eq, color: Colors.white),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'AI 正在回复...',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ] else ...[
+                  Icon(
+                    state.isRealtimeListening ? Icons.mic : Icons.mic_off,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    state.isRealtimeListening ? '正在聆听...' : '已静音',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 未连接或错误，显示连接按钮
+    return GestureDetector(
+      onTap: () => notifier.connectRealtime(),
+      child: Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: state.realtimeState == RealtimeSessionState.error
+              ? Colors.red
+              : (isDark ? AppColors.primaryDark : AppColors.primary),
+          borderRadius: BorderRadius.circular(28),
+        ),
+        child: Center(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.play_arrow, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(
+                state.realtimeState == RealtimeSessionState.error
+                    ? '重新连接'
+                    : '开始实时对话',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

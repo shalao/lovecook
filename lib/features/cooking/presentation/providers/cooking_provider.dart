@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../../core/services/ai_service.dart';
+import '../../../../core/services/realtime_voice_service.dart';
 import '../../../recipe/data/models/recipe_model.dart';
 import '../../data/services/voice_service.dart';
 
@@ -23,6 +27,15 @@ class ChatMessage {
   }) : timestamp = timestamp ?? DateTime.now();
 }
 
+/// 语音模式
+enum VoiceMode {
+  /// 按住说话模式（现有模式）
+  pushToTalk,
+
+  /// 实时语音模式（类似 ChatGPT）
+  realtime,
+}
+
 /// 烹饪模式状态
 class CookingState {
   final RecipeModel recipe;
@@ -34,6 +47,15 @@ class CookingState {
   final String? error;
   final int? timerSeconds;
 
+  /// 语音模式
+  final VoiceMode voiceMode;
+
+  /// 实时语音连接状态
+  final RealtimeSessionState realtimeState;
+
+  /// 实时语音是否在监听
+  final bool isRealtimeListening;
+
   const CookingState({
     required this.recipe,
     this.currentStep = 0,
@@ -43,7 +65,21 @@ class CookingState {
     this.isSpeaking = false,
     this.error,
     this.timerSeconds,
+    this.voiceMode = VoiceMode.pushToTalk,
+    this.realtimeState = RealtimeSessionState.disconnected,
+    this.isRealtimeListening = false,
   });
+
+  /// 是否使用实时语音模式
+  bool get isRealtimeMode => voiceMode == VoiceMode.realtime;
+
+  /// 实时语音是否已连接
+  bool get isRealtimeConnected =>
+      realtimeState == RealtimeSessionState.connected;
+
+  /// 实时语音是否正在连接
+  bool get isRealtimeConnecting =>
+      realtimeState == RealtimeSessionState.connecting;
 
   CookingState copyWith({
     RecipeModel? recipe,
@@ -56,6 +92,9 @@ class CookingState {
     int? timerSeconds,
     bool clearError = false,
     bool clearTimer = false,
+    VoiceMode? voiceMode,
+    RealtimeSessionState? realtimeState,
+    bool? isRealtimeListening,
   }) {
     return CookingState(
       recipe: recipe ?? this.recipe,
@@ -66,6 +105,9 @@ class CookingState {
       isSpeaking: isSpeaking ?? this.isSpeaking,
       error: clearError ? null : (error ?? this.error),
       timerSeconds: clearTimer ? null : (timerSeconds ?? this.timerSeconds),
+      voiceMode: voiceMode ?? this.voiceMode,
+      realtimeState: realtimeState ?? this.realtimeState,
+      isRealtimeListening: isRealtimeListening ?? this.isRealtimeListening,
     );
   }
 
@@ -85,19 +127,25 @@ class CookingState {
 class CookingNotifier extends StateNotifier<CookingState> {
   final VoiceService _voiceService;
   final AIService _aiService;
+  final RealtimeVoiceService _realtimeService;
+
+  StreamSubscription<Map<String, dynamic>>? _realtimeEventSubscription;
 
   CookingNotifier({
     required RecipeModel recipe,
     required VoiceService voiceService,
     required AIService aiService,
+    required RealtimeVoiceService realtimeService,
   })  : _voiceService = voiceService,
         _aiService = aiService,
+        _realtimeService = realtimeService,
         super(CookingState(recipe: recipe));
 
   /// 下一步
   void nextStep() {
     if (!state.isLastStep) {
       state = state.copyWith(currentStep: state.currentStep + 1);
+      _updateRealtimeContext();
     }
   }
 
@@ -105,6 +153,7 @@ class CookingNotifier extends StateNotifier<CookingState> {
   void previousStep() {
     if (!state.isFirstStep) {
       state = state.copyWith(currentStep: state.currentStep - 1);
+      _updateRealtimeContext();
     }
   }
 
@@ -112,16 +161,12 @@ class CookingNotifier extends StateNotifier<CookingState> {
   void goToStep(int step) {
     if (step >= 0 && step < state.totalSteps) {
       state = state.copyWith(currentStep: step);
+      _updateRealtimeContext();
     }
   }
 
   /// 朗读当前步骤
   Future<void> speakCurrentStep() async {
-    if (!_voiceService.isConfigured) {
-      state = state.copyWith(error: 'API 密钥未配置');
-      return;
-    }
-
     state = state.copyWith(isSpeaking: true, clearError: true);
     try {
       await _voiceService.speak(state.currentStepText);
@@ -140,11 +185,6 @@ class CookingNotifier extends StateNotifier<CookingState> {
 
   /// 开始录音
   Future<void> startRecording() async {
-    if (!_voiceService.isConfigured) {
-      state = state.copyWith(error: 'API 密钥未配置');
-      return;
-    }
-
     try {
       final hasPermission = await _voiceService.checkPermission();
       if (!hasPermission) {
@@ -268,8 +308,156 @@ ${recipe.tips != null ? '烹饪技巧：${recipe.tips}' : ''}
     state = state.copyWith(clearError: true);
   }
 
+  // ==================== 实时语音模式 ====================
+
+  /// 切换语音模式
+  Future<void> setVoiceMode(VoiceMode mode) async {
+    if (state.voiceMode == mode) return;
+
+    // 如果从实时模式切换，先断开连接
+    if (state.isRealtimeMode && mode == VoiceMode.pushToTalk) {
+      await disconnectRealtime();
+    }
+
+    state = state.copyWith(voiceMode: mode);
+
+    // 如果切换到实时模式，自动连接
+    if (mode == VoiceMode.realtime) {
+      await connectRealtime();
+    }
+  }
+
+  /// 连接实时语音
+  Future<void> connectRealtime() async {
+    if (state.isRealtimeConnected || state.isRealtimeConnecting) {
+      return;
+    }
+
+    state = state.copyWith(
+      realtimeState: RealtimeSessionState.connecting,
+      clearError: true,
+    );
+
+    try {
+      // 设置烹饪上下文作为系统提示
+      _realtimeService.updateInstructions(_buildCookingInstructions());
+
+      // 监听实时语音事件
+      _realtimeEventSubscription?.cancel();
+      _realtimeEventSubscription =
+          _realtimeService.serverEvents.listen(_handleRealtimeEvent);
+
+      // 连接
+      await _realtimeService.connect();
+
+      state = state.copyWith(
+        realtimeState: RealtimeSessionState.connected,
+        isRealtimeListening: true,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        realtimeState: RealtimeSessionState.error,
+        error: '实时语音连接失败: $e',
+      );
+    }
+  }
+
+  /// 断开实时语音
+  Future<void> disconnectRealtime() async {
+    _realtimeEventSubscription?.cancel();
+    _realtimeEventSubscription = null;
+
+    await _realtimeService.disconnect();
+
+    state = state.copyWith(
+      realtimeState: RealtimeSessionState.disconnected,
+      isRealtimeListening: false,
+    );
+  }
+
+  /// 静音/取消静音实时语音
+  void toggleRealtimeMute() {
+    final newListening = !state.isRealtimeListening;
+    _realtimeService.setMuted(!newListening);
+    state = state.copyWith(isRealtimeListening: newListening);
+  }
+
+  /// 处理实时语音事件
+  void _handleRealtimeEvent(Map<String, dynamic> event) {
+    final type = event['type'] as String?;
+
+    switch (type) {
+      case 'conversation.item.input_audio_transcription.completed':
+        // 用户语音转录完成
+        final transcript = event['transcript'] as String?;
+        if (transcript != null && transcript.isNotEmpty) {
+          final message = ChatMessage(
+            content: transcript,
+            type: MessageType.user,
+          );
+          state = state.copyWith(messages: [...state.messages, message]);
+        }
+        break;
+
+      case 'response.audio_transcript.done':
+        // AI 回复转录完成
+        final transcript = event['transcript'] as String?;
+        if (transcript != null && transcript.isNotEmpty) {
+          final message = ChatMessage(
+            content: transcript,
+            type: MessageType.assistant,
+          );
+          state = state.copyWith(messages: [...state.messages, message]);
+        }
+        break;
+
+      case 'response.audio.delta':
+        // AI 正在说话
+        if (!state.isSpeaking) {
+          state = state.copyWith(isSpeaking: true);
+        }
+        break;
+
+      case 'response.audio.done':
+        // AI 说话完成
+        state = state.copyWith(isSpeaking: false);
+        break;
+
+      case 'error':
+        final error = event['error'] as Map<String, dynamic>?;
+        final message = error?['message'] as String? ?? '实时语音错误';
+        state = state.copyWith(error: message);
+        break;
+    }
+  }
+
+  /// 构建烹饪助手的系统提示
+  String _buildCookingInstructions() {
+    final recipe = state.recipe;
+    return '''你是一位专业、友好的烹饪助手，正在帮助用户制作"${recipe.name}"。
+当前步骤：第${state.currentStep + 1}步（共${recipe.steps.length}步）
+步骤内容：${state.currentStepText}
+
+食材清单：
+${recipe.ingredients.map((i) => '- ${i.formatted}').join('\n')}
+
+${recipe.tips != null ? '烹饪技巧：${recipe.tips}' : ''}
+
+请用简短、清晰、自然的语言回答用户的问题。回答要实用、具体，像一位有经验的厨师在旁边指导一样。
+用户可能在做菜过程中提问，所以回答要简洁明了。''';
+  }
+
+  /// 当步骤变化时更新实时语音的上下文
+  void _updateRealtimeContext() {
+    if (state.isRealtimeConnected) {
+      _realtimeService.updateInstructions(_buildCookingInstructions());
+    }
+  }
+
   @override
   void dispose() {
+    _realtimeEventSubscription?.cancel();
+    _realtimeService.disconnect();
     _voiceService.dispose();
     super.dispose();
   }
@@ -281,10 +469,12 @@ final cookingProvider =
   (ref, recipe) {
     final voiceService = ref.watch(voiceServiceProvider);
     final aiService = ref.watch(aiServiceProvider);
+    final realtimeService = ref.watch(realtimeVoiceServiceProvider.notifier);
     return CookingNotifier(
       recipe: recipe,
       voiceService: voiceService,
       aiService: aiService,
+      realtimeService: realtimeService,
     );
   },
 );

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router.dart';
-import '../../../../core/services/ai_service.dart';
 import '../../../../core/services/locale_service.dart';
 import '../../../../core/services/storage_service.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -38,7 +38,6 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = ref.watch(localeProvider);
-    final aiConfig = ref.watch(aiConfigProvider);
     final avoidDays = ref.watch(avoidRecentDaysProvider);
 
     return Scaffold(
@@ -79,26 +78,6 @@ class SettingsScreen extends ConsumerWidget {
                 subtitle: Text('$avoidDays 天内不重复推荐相同菜品'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _showAvoidDaysDialog(context, ref, avoidDays),
-              ),
-            ],
-          ),
-          _SettingsSection(
-            title: 'AI 设置',
-            children: [
-              ListTile(
-                leading: Icon(
-                  Icons.key,
-                  color: aiConfig.isConfigured ? Colors.green : Colors.orange,
-                ),
-                title: const Text('API 密钥配置'),
-                subtitle: Text(
-                  aiConfig.isConfigured ? '已配置 (${aiConfig.model})' : '未配置',
-                  style: TextStyle(
-                    color: aiConfig.isConfigured ? Colors.green : Colors.orange,
-                  ),
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _showApiKeyDialog(context, ref, aiConfig),
               ),
             ],
           ),
@@ -205,115 +184,6 @@ class SettingsScreen extends ConsumerWidget {
             child: const Text('取消'),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showApiKeyDialog(BuildContext context, WidgetRef ref, AIConfig currentConfig) {
-    final apiKeyController = TextEditingController(text: currentConfig.apiKey);
-    final baseUrlController = TextEditingController(text: currentConfig.baseUrl);
-    String selectedModel = currentConfig.model;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('OpenAI API 配置'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'API 密钥',
-                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: apiKeyController,
-                  decoration: const InputDecoration(
-                    hintText: 'sk-...',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                  obscureText: true,
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'API 地址',
-                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: baseUrlController,
-                  decoration: const InputDecoration(
-                    hintText: 'https://api.openai.com/v1',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  '模型',
-                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: selectedModel,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'gpt-4o', child: Text('GPT-4o')),
-                    DropdownMenuItem(value: 'gpt-4o-mini', child: Text('GPT-4o Mini')),
-                    DropdownMenuItem(value: 'gpt-4-turbo', child: Text('GPT-4 Turbo')),
-                    DropdownMenuItem(value: 'gpt-3.5-turbo', child: Text('GPT-3.5 Turbo')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => selectedModel = value);
-                    }
-                  },
-                ),
-                const SizedBox(height: 12),
-                Builder(
-                  builder: (context) {
-                    final isDark = Theme.of(context).brightness == Brightness.dark;
-                    return Text(
-                      '提示: 使用第三方 API 代理时，请修改 API 地址',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade600,
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final notifier = ref.read(aiConfigProvider.notifier);
-                await notifier.setApiKey(apiKeyController.text.trim());
-                await notifier.setBaseUrl(baseUrlController.text.trim());
-                await notifier.setModel(selectedModel);
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('API 配置已保存')),
-                  );
-                }
-              },
-              child: const Text('保存'),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -447,7 +317,6 @@ class SettingsScreen extends ConsumerWidget {
               _buildDeleteItem('所有菜谱'),
               _buildDeleteItem('菜单计划和历史'),
               _buildDeleteItem('购物清单'),
-              _buildDeleteItem('API 配置'),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(12),
@@ -598,13 +467,13 @@ class SettingsScreen extends ConsumerWidget {
               _buildPolicySection(
                 context,
                 'AI 服务',
-                '当您使用 AI 功能（如生成菜单、识别食材）时，相关数据会发送到您配置的 AI 服务提供商（如 OpenAI）进行处理。请参阅相应服务提供商的隐私政策了解其数据处理方式。',
+                '当您使用 AI 功能（如生成菜单、识别食材）时，相关数据会通过安全的代理服务发送到 AI 服务提供商（如 OpenAI）进行处理。请参阅相应服务提供商的隐私政策了解其数据处理方式。',
               ),
               const SizedBox(height: 16),
               _buildPolicySection(
                 context,
                 '数据安全',
-                '您的 API 密钥等敏感信息仅存储在本地设备上，不会被上传到任何服务器。',
+                '您的所有本地数据均存储在本设备上，不会被上传到任何服务器。AI 功能通过安全代理提供，无需您配置任何密钥。',
               ),
               const SizedBox(height: 16),
               _buildPolicySection(

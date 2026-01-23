@@ -1,0 +1,9 @@
+name = "lovecook-ai-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+ALLOWED_ORIGIN = "*"
+
+# 在 Cloudflare Dashboard 中设置 secret:
+# wrangler secret put OPENAI_API_KEY

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../../core/services/ai_service.dart';
 import '../../../../core/services/storage_service.dart';
@@ -287,11 +288,6 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
       return;
     }
 
-    if (!_aiService.config.isConfigured) {
-      state = state.copyWith(globalError: '请先配置 API 密钥');
-      return;
-    }
-
     final settings = state.settings;
     if (!settings.hasSelectedMealType) {
       state = state.copyWith(globalError: '请至少选择一个餐次');
@@ -412,7 +408,7 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
 
   /// 刷新单个餐次
   Future<void> refreshMeal(String mealType) async {
-    if (_currentFamily == null || !_aiService.config.isConfigured) {
+    if (_currentFamily == null) {
       return;
     }
 
