@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/services/ai_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../family/data/repositories/family_repository.dart';
-import '../../../shopping/data/repositories/shopping_list_repository.dart';
 import '../providers/menu_provider.dart';
 
 class GenerateMenuScreen extends ConsumerWidget {
@@ -363,41 +362,43 @@ class GenerateMenuScreen extends ConsumerWidget {
               ),
             ],
           ),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => notifier.clearResult(),
-                  child: const Text('重新生成'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () async {
-                    final familyId = ref.read(currentFamilyProvider)?.id;
-                    await notifier.saveMenuPlan();
-                    // 刷新购物清单 Provider，确保购物清单页面能看到新数据
-                    if (familyId != null) {
-                      ref.invalidate(familyShoppingListsProvider(familyId));
-                    }
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('菜单已保存'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                      context.pop();
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
+              // 保存选项
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => notifier.clearResult(),
+                      child: const Text('重新生成'),
+                    ),
                   ),
-                  child: const Text('保存菜单'),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => _showSaveOptionsDialog(context, ref, notifier),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('保存菜单'),
+                    ),
+                  ),
+                ],
               ),
+              // 购物清单按钮
+              if (result.shoppingList.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.shopping_cart_outlined),
+                    label: const Text('生成购物清单'),
+                    onPressed: () => _showShoppingListConfirmDialog(context, ref, notifier, result),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -615,6 +616,161 @@ class GenerateMenuScreen extends ConsumerWidget {
       default:
         return type;
     }
+  }
+
+  /// 显示保存选项对话框
+  void _showSaveOptionsDialog(
+    BuildContext context,
+    WidgetRef ref,
+    MenuGenerateNotifier notifier,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('保存菜单'),
+        content: const Text('请选择保存方式：'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          OutlinedButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await _saveMenu(context, ref, notifier, mergeWithExisting: false);
+            },
+            child: const Text('替换全部'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await _saveMenu(context, ref, notifier, mergeWithExisting: true);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isDark ? AppColors.primaryDark : AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('合并到现有'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 保存菜单的实际逻辑
+  Future<void> _saveMenu(
+    BuildContext context,
+    WidgetRef ref,
+    MenuGenerateNotifier notifier, {
+    required bool mergeWithExisting,
+  }) async {
+    await notifier.saveMenuPlan(
+      mergeWithExisting: mergeWithExisting,
+      generateShoppingList: false,
+    );
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(mergeWithExisting ? '菜单已合并保存' : '菜单已保存'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      context.pop();
+    }
+  }
+
+  /// 显示购物清单确认对话框
+  void _showShoppingListConfirmDialog(
+    BuildContext context,
+    WidgetRef ref,
+    MenuGenerateNotifier notifier,
+    MenuPlanResult result,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.shopping_cart, size: 24),
+            SizedBox(width: 8),
+            Text('生成购物清单'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '将根据菜单和库存生成以下购物清单：',
+                style: TextStyle(
+                  color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: result.shoppingList.map((item) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline,
+                            size: 16,
+                            color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade400,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(item.name)),
+                          Text(
+                            '${item.quantity}${item.unit}',
+                            style: TextStyle(
+                              color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await notifier.generateShoppingListOnly();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('购物清单已生成'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isDark ? AppColors.primaryDark : AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('确认生成'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

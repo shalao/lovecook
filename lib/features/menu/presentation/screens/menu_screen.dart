@@ -427,63 +427,284 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
 
   Widget _buildMealRow(BuildContext context, DayPlanModel day, MealModel meal) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final recipeNames = meal.notes?.split('、') ?? [];
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(meal.icon, style: const TextStyle(fontSize: 16)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  meal.label,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 13,
-                    color: isDark ? AppColors.textPrimaryDark : null,
-                  ),
+          // 餐次标题行
+          Row(
+            children: [
+              Text(meal.icon, style: const TextStyle(fontSize: 16)),
+              const SizedBox(width: 8),
+              Text(
+                meal.label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13,
+                  color: isDark ? AppColors.textPrimaryDark : null,
                 ),
-                if (meal.notes != null && meal.notes!.isNotEmpty)
-                  Text(
-                    meal.notes!,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
-                    ),
-                  ),
-              ],
+              ),
+              const Spacer(),
+              // 删除整个餐次按钮
+              IconButton(
+                icon: Icon(
+                  Icons.delete_outline,
+                  size: 18,
+                  color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade400,
+                ),
+                onPressed: () => _confirmDeleteMeal(context, day, meal),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: '删除此餐',
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // 每道菜品
+          ...List.generate(meal.recipeIds.length, (index) {
+            final recipeName = index < recipeNames.length ? recipeNames[index] : '菜品${index + 1}';
+            return _buildRecipeItem(context, day, meal, index, recipeName);
+          }),
+        ],
+      ),
+    );
+  }
+
+  /// 构建单道菜品项
+  Widget _buildRecipeItem(
+    BuildContext context,
+    DayPlanModel day,
+    MealModel meal,
+    int recipeIndex,
+    String recipeName,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 24, top: 4, bottom: 4),
+      child: Row(
+        children: [
+          Icon(
+            Icons.restaurant_menu,
+            size: 14,
+            color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade400,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              recipeName,
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade700,
+              ),
             ),
           ),
-          // 替换按钮
+          // 换一个按钮 (AI 重新生成)
+          IconButton(
+            icon: Icon(
+              Icons.refresh,
+              size: 18,
+              color: isDark ? AppColors.primaryDark : AppColors.primary,
+            ),
+            onPressed: () => _replaceRecipeWithAI(context, day, meal, recipeIndex, recipeName),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32),
+            tooltip: '换一道菜',
+          ),
+          // 从列表选择按钮
           IconButton(
             icon: Icon(
               Icons.swap_horiz,
-              size: 20,
+              size: 18,
               color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade500,
             ),
-            onPressed: () => _showReplaceMealDialog(context, day, meal),
+            onPressed: () => _showReplaceRecipeDialog(context, day, meal, recipeIndex),
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            tooltip: '替换菜品',
+            constraints: const BoxConstraints(minWidth: 32),
+            tooltip: '从菜谱选择',
+          ),
+          // 删除按钮
+          IconButton(
+            icon: Icon(
+              Icons.close,
+              size: 18,
+              color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade400,
+            ),
+            onPressed: () => _confirmDeleteRecipe(context, day, meal, recipeIndex, recipeName),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32),
+            tooltip: '删除此菜',
           ),
         ],
       ),
     );
   }
 
-  void _showReplaceMealDialog(BuildContext context, DayPlanModel day, MealModel meal) {
+  /// 确认删除整个餐次
+  void _confirmDeleteMeal(BuildContext context, DayPlanModel day, MealModel meal) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除餐次'),
+        content: Text('确定要删除 ${day.dateFormatted} 的${meal.label}吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              final repository = ref.read(mealPlanRepositoryProvider);
+              await repository.deleteMeals(
+                familyId: widget.plan.familyId,
+                date: day.date,
+                mealTypes: [meal.type],
+              );
+              ref.read(menuListProvider.notifier).loadPlans();
+              if (context.mounted) {
+                Navigator.pop(context); // 关闭详情弹窗
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('已删除${meal.label}'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            child: Text('删除', style: TextStyle(color: Colors.red.shade600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 确认删除单道菜
+  void _confirmDeleteRecipe(
+    BuildContext context,
+    DayPlanModel day,
+    MealModel meal,
+    int recipeIndex,
+    String recipeName,
+  ) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除菜品'),
+        content: Text('确定要删除"$recipeName"吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              final repository = ref.read(mealPlanRepositoryProvider);
+              await repository.deleteRecipeFromMeal(
+                familyId: widget.plan.familyId,
+                date: day.date,
+                mealType: meal.type,
+                recipeIndex: recipeIndex,
+              );
+              ref.read(menuListProvider.notifier).loadPlans();
+              if (context.mounted) {
+                Navigator.pop(context); // 关闭详情弹窗
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('已删除"$recipeName"'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            child: Text('删除', style: TextStyle(color: Colors.red.shade600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 使用 AI 重新生成替换菜品
+  Future<void> _replaceRecipeWithAI(
+    BuildContext context,
+    DayPlanModel day,
+    MealModel meal,
+    int recipeIndex,
+    String currentRecipeName,
+  ) async {
+    // 显示加载对话框
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 16),
+            const Text('AI 正在生成替换菜品...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final notifier = ref.read(menuGenerateProvider.notifier);
+      await notifier.replaceRecipe(
+        date: day.date,
+        mealType: meal.type,
+        recipeIndex: recipeIndex,
+      );
+
+      ref.read(menuListProvider.notifier).loadPlans();
+
+      if (context.mounted) {
+        Navigator.pop(context); // 关闭加载对话框
+        Navigator.pop(context); // 关闭详情弹窗
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('菜品已替换'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // 关闭加载对话框
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('替换失败: $e'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// 显示从菜谱列表选择替换的对话框
+  void _showReplaceRecipeDialog(
+    BuildContext context,
+    DayPlanModel day,
+    MealModel meal,
+    int recipeIndex,
+  ) {
     final allRecipes = ref.read(allRecipesProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final currentRecipeId = recipeIndex < meal.recipeIds.length ? meal.recipeIds[recipeIndex] : '';
 
     showDialog(
       context: context,
       builder: (dialogContext) {
         final dialogIsDark = Theme.of(dialogContext).brightness == Brightness.dark;
         return AlertDialog(
-          title: Text('替换${meal.label}'),
+          title: const Text('选择替换菜品'),
           content: SizedBox(
             width: double.maxFinite,
             height: 400,
@@ -500,7 +721,7 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
                     itemCount: allRecipes.length,
                     itemBuilder: (context, index) {
                       final recipe = allRecipes[index];
-                      final isCurrentRecipe = meal.recipeIds.contains(recipe.id);
+                      final isCurrentRecipe = recipe.id == currentRecipeId;
                       return ListTile(
                         leading: recipe.imageUrl != null
                             ? ClipRRect(
@@ -510,7 +731,7 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
                                   width: 40,
                                   height: 40,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => Container(
+                                  errorBuilder: (_, _, _) => Container(
                                     width: 40,
                                     height: 40,
                                     color: dialogIsDark ? AppColors.inputBackgroundDark : Colors.grey.shade200,
@@ -547,7 +768,7 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
                         trailing: isCurrentRecipe
                             ? Icon(Icons.check, color: dialogIsDark ? AppColors.primaryDark : AppColors.primary)
                             : null,
-                        onTap: () => _replaceMeal(dialogContext, day, meal, recipe),
+                        onTap: () => _replaceRecipeFromList(dialogContext, day, meal, recipeIndex, recipe),
                       );
                     },
                   ),
@@ -563,32 +784,33 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
     );
   }
 
-  Future<void> _replaceMeal(
+  /// 从列表选择替换菜品
+  Future<void> _replaceRecipeFromList(
     BuildContext context,
     DayPlanModel day,
     MealModel meal,
+    int recipeIndex,
     RecipeModel newRecipe,
   ) async {
     final repository = ref.read(mealPlanRepositoryProvider);
 
-    await repository.updateMeal(
-      widget.plan.id,
-      day.date,
-      meal.type,
-      [newRecipe.id],
-      notes: newRecipe.name,
+    await repository.replaceRecipeInMeal(
+      familyId: widget.plan.familyId,
+      date: day.date,
+      mealType: meal.type,
+      recipeIndex: recipeIndex,
+      newRecipeId: newRecipe.id,
+      newRecipeName: newRecipe.name,
     );
 
-    // 刷新菜单列表
     ref.read(menuListProvider.notifier).loadPlans();
 
     if (context.mounted) {
       Navigator.pop(context); // 关闭选择对话框
       Navigator.pop(context); // 关闭详情弹窗
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('已将${meal.label}替换为"${newRecipe.name}"'),
+          content: Text('已替换为"${newRecipe.name}"'),
           behavior: SnackBarBehavior.floating,
         ),
       );

@@ -35,6 +35,249 @@ class MealPlanRepository {
     await _storage.mealPlansBox.delete(id);
   }
 
+  /// 合并新菜单到现有菜单（按日期+餐次粒度）
+  /// [newDays] - 新生成的天计划列表
+  /// [replaceExisting] - true=覆盖同日期餐次, false=跳过已有
+  Future<MealPlanModel> mergeMenuPlan({
+    required String familyId,
+    required List<DayPlanModel> newDays,
+    required bool replaceExisting,
+    String? notes,
+    String? shoppingListId,
+  }) async {
+    // 获取现有菜单或创建新菜单
+    MealPlanModel? existingPlan = getCurrentMealPlan(familyId);
+
+    if (existingPlan == null) {
+      // 没有现有菜单，直接创建新的
+      final allDates = newDays.map((d) => d.date).toList();
+      final startDate = allDates.reduce((a, b) => a.isBefore(b) ? a : b);
+      final endDate = allDates.reduce((a, b) => a.isAfter(b) ? a : b);
+
+      final plan = MealPlanModel.create(
+        familyId: familyId,
+        startDate: startDate,
+        days: (endDate.difference(startDate).inDays + 1),
+      );
+
+      // 填充新的天计划
+      for (final newDay in newDays) {
+        final dayIndex = plan.days.indexWhere((d) =>
+            d.date.year == newDay.date.year &&
+            d.date.month == newDay.date.month &&
+            d.date.day == newDay.date.day);
+        if (dayIndex >= 0) {
+          plan.days[dayIndex] = newDay;
+        }
+      }
+
+      plan.notes = notes;
+      plan.shoppingListId = shoppingListId;
+      await saveMealPlan(plan);
+      return plan;
+    }
+
+    // 合并到现有菜单
+    for (final newDay in newDays) {
+      final normalizedDate = DateTime(newDay.date.year, newDay.date.month, newDay.date.day);
+
+      // 查找现有天计划
+      final existingDayIndex = existingPlan.days.indexWhere((d) =>
+          d.date.year == normalizedDate.year &&
+          d.date.month == normalizedDate.month &&
+          d.date.day == normalizedDate.day);
+
+      if (existingDayIndex >= 0) {
+        // 该日期已有计划，合并餐次
+        final existingDay = existingPlan.days[existingDayIndex];
+
+        for (final newMeal in newDay.meals) {
+          final existingMealIndex = existingDay.meals.indexWhere(
+              (m) => m.type == newMeal.type);
+
+          if (existingMealIndex >= 0) {
+            // 该餐次已有
+            if (replaceExisting) {
+              existingDay.meals[existingMealIndex] = newMeal;
+            }
+            // 如果不替换，则跳过
+          } else {
+            // 该餐次不存在，添加
+            existingDay.meals.add(newMeal);
+          }
+        }
+      } else {
+        // 该日期没有计划，需要扩展菜单日期范围
+        // 先检查日期是否在范围内
+        if (normalizedDate.isBefore(existingPlan.startDate)) {
+          // 扩展开始日期
+          final daysToAdd = existingPlan.startDate.difference(normalizedDate).inDays;
+          final newDaysList = <DayPlanModel>[];
+          for (var i = 0; i < daysToAdd; i++) {
+            final date = normalizedDate.add(Duration(days: i));
+            if (date.year == newDay.date.year &&
+                date.month == newDay.date.month &&
+                date.day == newDay.date.day) {
+              newDaysList.add(newDay);
+            } else {
+              newDaysList.add(DayPlanModel(date: date, meals: []));
+            }
+          }
+          existingPlan.days.insertAll(0, newDaysList);
+          existingPlan.startDate = normalizedDate;
+        } else if (normalizedDate.isAfter(existingPlan.endDate)) {
+          // 扩展结束日期
+          final daysToAdd = normalizedDate.difference(existingPlan.endDate).inDays;
+          for (var i = 1; i <= daysToAdd; i++) {
+            final date = existingPlan.endDate.add(Duration(days: i));
+            if (date.year == newDay.date.year &&
+                date.month == newDay.date.month &&
+                date.day == newDay.date.day) {
+              existingPlan.days.add(newDay);
+            } else {
+              existingPlan.days.add(DayPlanModel(date: date, meals: []));
+            }
+          }
+          existingPlan.endDate = normalizedDate;
+        }
+      }
+    }
+
+    if (notes != null) {
+      existingPlan.notes = notes;
+    }
+    if (shoppingListId != null) {
+      existingPlan.shoppingListId = shoppingListId;
+    }
+
+    await existingPlan.save();
+    return existingPlan;
+  }
+
+  /// 删除指定日期的指定餐次
+  Future<void> deleteMeals({
+    required String familyId,
+    required DateTime date,
+    required List<String> mealTypes,
+  }) async {
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+
+    // 查找包含该日期的菜单
+    for (final plan in _storage.mealPlansBox.values) {
+      if (plan.familyId != familyId) continue;
+
+      final dayIndex = plan.days.indexWhere((d) =>
+          d.date.year == normalizedDate.year &&
+          d.date.month == normalizedDate.month &&
+          d.date.day == normalizedDate.day);
+
+      if (dayIndex < 0) continue;
+
+      // 移除指定餐次
+      plan.days[dayIndex].meals.removeWhere(
+          (m) => mealTypes.contains(m.type));
+
+      await plan.save();
+      return;
+    }
+  }
+
+  /// 删除指定日期指定餐次的单道菜
+  Future<void> deleteRecipeFromMeal({
+    required String familyId,
+    required DateTime date,
+    required String mealType,
+    required int recipeIndex,
+  }) async {
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+
+    for (final plan in _storage.mealPlansBox.values) {
+      if (plan.familyId != familyId) continue;
+
+      final dayIndex = plan.days.indexWhere((d) =>
+          d.date.year == normalizedDate.year &&
+          d.date.month == normalizedDate.month &&
+          d.date.day == normalizedDate.day);
+
+      if (dayIndex < 0) continue;
+
+      final mealIndex = plan.days[dayIndex].meals.indexWhere(
+          (m) => m.type == mealType);
+
+      if (mealIndex < 0) continue;
+
+      final meal = plan.days[dayIndex].meals[mealIndex];
+      if (recipeIndex >= 0 && recipeIndex < meal.recipeIds.length) {
+        meal.recipeIds.removeAt(recipeIndex);
+
+        // 更新 notes（移除对应菜名）
+        if (meal.notes != null) {
+          final names = meal.notes!.split('、');
+          if (recipeIndex < names.length) {
+            names.removeAt(recipeIndex);
+            plan.days[dayIndex].meals[mealIndex] = MealModel(
+              type: meal.type,
+              recipeIds: meal.recipeIds,
+              notes: names.join('、'),
+            );
+          }
+        }
+
+        await plan.save();
+      }
+      return;
+    }
+  }
+
+  /// 替换指定日期指定餐次的单道菜
+  Future<void> replaceRecipeInMeal({
+    required String familyId,
+    required DateTime date,
+    required String mealType,
+    required int recipeIndex,
+    required String newRecipeId,
+    required String newRecipeName,
+  }) async {
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+
+    for (final plan in _storage.mealPlansBox.values) {
+      if (plan.familyId != familyId) continue;
+
+      final dayIndex = plan.days.indexWhere((d) =>
+          d.date.year == normalizedDate.year &&
+          d.date.month == normalizedDate.month &&
+          d.date.day == normalizedDate.day);
+
+      if (dayIndex < 0) continue;
+
+      final mealIndex = plan.days[dayIndex].meals.indexWhere(
+          (m) => m.type == mealType);
+
+      if (mealIndex < 0) continue;
+
+      final meal = plan.days[dayIndex].meals[mealIndex];
+      if (recipeIndex >= 0 && recipeIndex < meal.recipeIds.length) {
+        meal.recipeIds[recipeIndex] = newRecipeId;
+
+        // 更新 notes（替换对应菜名）
+        if (meal.notes != null) {
+          final names = meal.notes!.split('、');
+          if (recipeIndex < names.length) {
+            names[recipeIndex] = newRecipeName;
+            plan.days[dayIndex].meals[mealIndex] = MealModel(
+              type: meal.type,
+              recipeIds: meal.recipeIds,
+              notes: names.join('、'),
+            );
+          }
+        }
+
+        await plan.save();
+      }
+      return;
+    }
+  }
+
   /// 获取当前有效的菜单计划
   MealPlanModel? getCurrentMealPlan(String familyId) {
     final now = DateTime.now();

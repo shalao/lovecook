@@ -1,4 +1,3 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../../core/services/ai_service.dart';
@@ -184,22 +183,25 @@ class MenuGenerateNotifier extends StateNotifier<MenuGenerateState> {
     }
   }
 
-  Future<void> saveMenuPlan() async {
+  /// 保存菜单计划
+  /// [mergeWithExisting] - true 合并到现有菜单，false 替换全部
+  /// [generateShoppingList] - 是否同时生成购物清单
+  Future<void> saveMenuPlan({
+    bool mergeWithExisting = true,
+    bool generateShoppingList = false,
+  }) async {
     final family = _currentFamily;
     if (state.result == null || family == null) return;
 
-    final plan = MealPlanModel.create(
-      familyId: family.id,
-      startDate: DateTime.now(),
-      days: state.settings.days,
-    );
+    // 将 AI 结果转换为 DayPlanModel 列表
+    final newDays = <DayPlanModel>[];
+    final now = DateTime.now();
 
-    // 将 AI 结果转换为 MealPlanModel，并保存菜谱
-    for (var i = 0; i < state.result!.days.length && i < plan.days.length; i++) {
+    for (var i = 0; i < state.result!.days.length; i++) {
       final dayData = state.result!.days[i];
-      final dayPlan = plan.days[i];
+      final date = DateTime(now.year, now.month, now.day).add(Duration(days: i));
 
-      dayPlan.meals.clear();
+      final meals = <MealModel>[];
       for (final mealData in dayData.meals) {
         final recipeIds = <String>[];
 
@@ -210,24 +212,142 @@ class MenuGenerateNotifier extends StateNotifier<MenuGenerateState> {
           recipeIds.add(recipe.id);
         }
 
-        dayPlan.meals.add(MealModel(
+        meals.add(MealModel(
           type: _convertMealType(mealData.type),
           recipeIds: recipeIds,
           notes: mealData.recipes.map((r) => r['name'] as String).join('、'),
         ));
       }
+
+      newDays.add(DayPlanModel(date: date, meals: meals));
     }
 
-    plan.notes = state.result!.nutritionSummary;
+    String? shoppingListId;
 
-    // 保存购物清单
-    if (state.result!.shoppingList.isNotEmpty) {
-      final shoppingList = _convertToShoppingList(state.result!, plan.id);
+    // 根据用户选择决定是否生成购物清单
+    if (generateShoppingList && state.result!.shoppingList.isNotEmpty) {
+      final shoppingList = _convertToShoppingList(state.result!, '');
       await _shoppingListRepository.saveShoppingList(shoppingList);
-      plan.shoppingListId = shoppingList.id;
+      shoppingListId = shoppingList.id;
     }
 
-    await _repository.saveMealPlan(plan);
+    if (mergeWithExisting) {
+      // 合并到现有菜单
+      await _repository.mergeMenuPlan(
+        familyId: family.id,
+        newDays: newDays,
+        replaceExisting: true,
+        notes: state.result!.nutritionSummary,
+        shoppingListId: shoppingListId,
+      );
+    } else {
+      // 替换全部：创建新菜单
+      final plan = MealPlanModel.create(
+        familyId: family.id,
+        startDate: DateTime.now(),
+        days: state.settings.days,
+      );
+
+      for (var i = 0; i < newDays.length && i < plan.days.length; i++) {
+        plan.days[i] = newDays[i];
+      }
+
+      plan.notes = state.result!.nutritionSummary;
+      plan.shoppingListId = shoppingListId;
+      await _repository.saveMealPlan(plan);
+    }
+  }
+
+  /// 单独生成购物清单（不保存菜单）
+  Future<void> generateShoppingListOnly() async {
+    final family = _currentFamily;
+    if (state.result == null || family == null) return;
+
+    if (state.result!.shoppingList.isNotEmpty) {
+      final shoppingList = _convertToShoppingList(state.result!, '');
+      await _shoppingListRepository.saveShoppingList(shoppingList);
+    }
+  }
+
+  /// 替换指定菜品（AI 重新生成一道）
+  Future<void> replaceRecipe({
+    required DateTime date,
+    required String mealType,
+    required int recipeIndex,
+    String? preference,
+  }) async {
+    final family = _currentFamily;
+    if (family == null) return;
+
+    // 获取当前餐次的所有菜品名称（用于排除）
+    final dayPlan = _repository.getDayPlan(family.id, date);
+    final excludeRecipes = <String>[];
+    if (dayPlan != null) {
+      for (final meal in dayPlan.meals) {
+        if (meal.type == mealType && meal.notes != null) {
+          excludeRecipes.addAll(meal.notes!.split('、'));
+        }
+      }
+    }
+
+    try {
+      // 调用 AI 生成单道替换菜品
+      final recipeData = await _aiService.generateSingleRecipe(
+        family: family,
+        inventory: _inventory,
+        mealType: mealType,
+        excludeRecipes: excludeRecipes,
+        preference: preference,
+      );
+
+      // 保存新菜谱
+      final newRecipe = _convertToRecipeModel(recipeData, family.id);
+      await _recipeRepository.saveRecipe(newRecipe);
+
+      // 更新菜单中的菜品
+      await _repository.replaceRecipeInMeal(
+        familyId: family.id,
+        date: date,
+        mealType: mealType,
+        recipeIndex: recipeIndex,
+        newRecipeId: newRecipe.id,
+        newRecipeName: newRecipe.name,
+      );
+    } on AIServiceException {
+      // 生成失败，静默处理
+    }
+  }
+
+  /// 删除指定菜品
+  Future<void> deleteRecipe({
+    required DateTime date,
+    required String mealType,
+    required int recipeIndex,
+  }) async {
+    final family = _currentFamily;
+    if (family == null) return;
+
+    await _repository.deleteRecipeFromMeal(
+      familyId: family.id,
+      date: date,
+      mealType: mealType,
+      recipeIndex: recipeIndex,
+    );
+  }
+
+  /// 删除指定日期的餐次
+  Future<void> deleteMeals({
+    required DateTime date,
+    required List<String> mealTypes,
+  }) async {
+    final family = _currentFamily;
+    if (family == null) return;
+
+    await _repository.deleteMeals(
+      familyId: family.id,
+      date: date,
+      mealTypes: mealTypes,
+    );
   }
 
   /// 将 AI 返回的菜谱数据转换为 RecipeModel

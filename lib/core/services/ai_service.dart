@@ -16,8 +16,8 @@ class AIConfig {
   final String visionModel;
 
   const AIConfig({
-    this.model = 'gpt-4o',
-    this.visionModel = 'gpt-4o',
+    this.model = 'gpt-4o-mini',  // 使用更快的模型
+    this.visionModel = 'gpt-4o',  // 视觉识别保持 gpt-4o
   });
 
   /// 始终返回 true，因为使用服务端代理
@@ -44,8 +44,8 @@ class AIConfigNotifier extends StateNotifier<AIConfig> {
 
   void _loadConfig() {
     final box = _storage.settingsBox;
-    final model = box.get('ai_model', defaultValue: 'gpt-4o') as String;
-    state = AIConfig(model: model, visionModel: model);
+    final model = box.get('ai_model', defaultValue: 'gpt-4o-mini') as String;
+    state = AIConfig(model: model, visionModel: 'gpt-4o');  // 视觉模型保持 gpt-4o
 
     // 清理旧的 API Key 存储（迁移到服务端代理后不再需要）
     _cleanupLegacySettings();
@@ -554,6 +554,56 @@ $inventoryInfo
       );
     } on AiProxyException catch (e) {
       throw AIServiceException('对话失败: ${e.message}');
+    }
+  }
+
+  /// 生成单道替换菜品（快速版本，用于换一道菜）
+  Future<Map<String, dynamic>> generateSingleRecipe({
+    required FamilyModel family,
+    required List<IngredientModel> inventory,
+    required String mealType,
+    required List<String> excludeRecipes,
+    String? preference,
+  }) async {
+    // 简化家庭信息：只包含必要的健康限制
+    final healthRestrictions = <String>[];
+    final allergies = <String>[];
+    for (final member in family.members) {
+      healthRestrictions.addAll(member.healthConditions);
+      allergies.addAll(member.allergies);
+    }
+
+    // 简化库存信息：只列出名称
+    final inventoryNames = inventory.map((i) => i.name).take(30).join('、');
+
+    try {
+      final response = await _proxyService.chatCompletions(
+        model: config.model,
+        maxTokens: 800,  // 单道菜只需要较少 token
+        temperature: 0.8,
+        messages: [
+          {
+            'role': 'system',
+            'content': '你是家常菜专家。快速推荐一道适合的菜品。'
+          },
+          {
+            'role': 'user',
+            'content': '''推荐一道$mealType菜品：
+
+${healthRestrictions.isNotEmpty ? '健康限制：${healthRestrictions.toSet().join("、")}\n' : ''}${allergies.isNotEmpty ? '过敏源：${allergies.toSet().join("、")}\n' : ''}${inventoryNames.isNotEmpty ? '可用食材：$inventoryNames\n' : ''}${excludeRecipes.isNotEmpty ? '排除：${excludeRecipes.join("、")}\n' : ''}${preference != null ? '偏好：$preference\n' : ''}
+返回JSON：
+{"name":"菜名","description":"简短描述","prepTime":10,"cookTime":15,"ingredients":[{"name":"食材","quantity":1,"unit":"个"}],"steps":["步骤1","步骤2"],"tips":"技巧","tags":["标签"],"nutrition":{"calories":200,"protein":15,"carbs":20,"fat":8}}
+
+只返回JSON。''',
+          },
+        ],
+      );
+
+      final content = response['choices'][0]['message']['content'] as String;
+      final jsonStr = _extractJson(content);
+      return json.decode(jsonStr) as Map<String, dynamic>;
+    } on AiProxyException catch (e) {
+      throw AIServiceException('生成失败: ${e.message}');
     }
   }
 
