@@ -202,7 +202,7 @@ class MealPlanRepository {
       if (dayIndex < 0) continue;
 
       final mealIndex = plan.days[dayIndex].meals.indexWhere(
-          (m) => m.type == mealType);
+          (m) => m.type.toLowerCase() == mealType.toLowerCase());
 
       if (mealIndex < 0) continue;
 
@@ -251,7 +251,7 @@ class MealPlanRepository {
       if (dayIndex < 0) continue;
 
       final mealIndex = plan.days[dayIndex].meals.indexWhere(
-          (m) => m.type == mealType);
+          (m) => m.type.toLowerCase() == mealType.toLowerCase());
 
       if (mealIndex < 0) continue;
 
@@ -353,6 +353,116 @@ class MealPlanRepository {
     }
 
     await mealPlan.save();
+  }
+
+  /// v1.2: 添加菜谱到指定日期和餐次
+  Future<void> addRecipeToDate({
+    required String familyId,
+    required DateTime date,
+    required String mealType,
+    required dynamic recipe, // RecipeModel
+  }) async {
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+
+    // 获取或创建当前菜单
+    MealPlanModel? plan = getCurrentMealPlan(familyId);
+
+    if (plan == null) {
+      // 创建新菜单
+      plan = MealPlanModel.create(
+        familyId: familyId,
+        startDate: normalizedDate,
+        days: 1,
+      );
+      await saveMealPlan(plan);
+    }
+
+    // 查找或扩展到包含目标日期
+    final dayIndex = plan.days.indexWhere((d) =>
+        d.date.year == normalizedDate.year &&
+        d.date.month == normalizedDate.month &&
+        d.date.day == normalizedDate.day);
+
+    if (dayIndex >= 0) {
+      // 日期已存在，添加到对应餐次
+      final dayPlan = plan.days[dayIndex];
+      final mealIndex = dayPlan.meals.indexWhere((m) => m.type == mealType);
+
+      if (mealIndex >= 0) {
+        // 餐次已存在，追加菜谱
+        final meal = dayPlan.meals[mealIndex];
+        meal.recipeIds.add(recipe.id);
+        final names = meal.notes?.split('、') ?? [];
+        names.add(recipe.name);
+        dayPlan.meals[mealIndex] = MealModel(
+          type: meal.type,
+          recipeIds: meal.recipeIds,
+          notes: names.join('、'),
+        );
+      } else {
+        // 餐次不存在，创建新餐次
+        dayPlan.meals.add(MealModel(
+          type: mealType,
+          recipeIds: [recipe.id],
+          notes: recipe.name,
+        ));
+      }
+    } else {
+      // 日期不存在，需要扩展菜单
+      if (normalizedDate.isBefore(plan.startDate)) {
+        // 向前扩展
+        final daysToAdd = plan.startDate.difference(normalizedDate).inDays;
+        final newDays = <DayPlanModel>[];
+        for (var i = 0; i < daysToAdd; i++) {
+          final d = normalizedDate.add(Duration(days: i));
+          if (d.year == normalizedDate.year &&
+              d.month == normalizedDate.month &&
+              d.day == normalizedDate.day) {
+            // 目标日期
+            newDays.add(DayPlanModel(
+              date: d,
+              meals: [
+                MealModel(
+                  type: mealType,
+                  recipeIds: [recipe.id],
+                  notes: recipe.name,
+                ),
+              ],
+            ));
+          } else {
+            newDays.add(DayPlanModel(date: d, meals: []));
+          }
+        }
+        plan.days.insertAll(0, newDays);
+        plan.startDate = normalizedDate;
+      } else {
+        // 向后扩展
+        final daysToAdd = normalizedDate.difference(plan.endDate).inDays;
+        for (var i = 1; i <= daysToAdd; i++) {
+          final d = plan.endDate.add(Duration(days: i));
+          if (d.year == normalizedDate.year &&
+              d.month == normalizedDate.month &&
+              d.day == normalizedDate.day) {
+            // 目标日期
+            plan.days.add(DayPlanModel(
+              date: d,
+              meals: [
+                MealModel(
+                  type: mealType,
+                  recipeIds: [recipe.id],
+                  notes: recipe.name,
+                ),
+              ],
+            ));
+          } else {
+            plan.days.add(DayPlanModel(date: d, meals: []));
+          }
+        }
+        plan.endDate = normalizedDate;
+      }
+    }
+
+    await plan.save();
   }
 
   /// 获取历史菜单计划

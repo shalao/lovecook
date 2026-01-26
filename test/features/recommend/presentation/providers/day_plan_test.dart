@@ -322,7 +322,7 @@ void main() {
   group('RecommendState', () {
     group('hasAnyRecommendation', () {
       test('空状态返回false', () {
-        const state = RecommendState();
+        final state = RecommendState();
 
         expect(state.hasAnyRecommendation, false);
       });
@@ -370,19 +370,19 @@ void main() {
 
     group('isAnyLoading', () {
       test('初始状态不加载', () {
-        const state = RecommendState();
+        final state = RecommendState();
 
         expect(state.isAnyLoading, false);
       });
 
       test('isInitialLoading为true时返回true', () {
-        const state = RecommendState(isInitialLoading: true);
+        final state = RecommendState(isInitialLoading: true);
 
         expect(state.isAnyLoading, true);
       });
 
       test('任意餐次加载中返回true', () {
-        const state = RecommendState(
+        final state = RecommendState(
           breakfast: MealRecommend(
             type: 'breakfast',
             typeName: '早餐',
@@ -396,7 +396,7 @@ void main() {
 
     group('isMultiDay', () {
       test('空dayPlans返回false', () {
-        const state = RecommendState();
+        final state = RecommendState();
 
         expect(state.isMultiDay, false);
       });
@@ -452,7 +452,7 @@ void main() {
       });
 
       test('未知类型返回breakfast', () {
-        const state = RecommendState();
+        final state = RecommendState();
 
         final result = state.getMealByType('unknown');
         expect(result.type, 'breakfast');

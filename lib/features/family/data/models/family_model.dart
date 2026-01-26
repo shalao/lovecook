@@ -83,6 +83,14 @@ class FamilyMemberModel {
   @HiveField(8)
   String? notes; // 备注（如：糖尿病需严格控糖、痛风避免高嘌呤食物等）
 
+  /// v1.2: 健身目标（单选）
+  @HiveField(9)
+  String? fitnessGoal;
+
+  /// v1.2: 孕期阶段（单选）
+  @HiveField(10)
+  String? pregnancyStage;
+
   FamilyMemberModel({
     required this.id,
     required this.name,
@@ -93,6 +101,8 @@ class FamilyMemberModel {
     this.dislikes = const [],
     this.favorites = const [],
     this.notes,
+    this.fitnessGoal,
+    this.pregnancyStage,
   });
 
   factory FamilyMemberModel.create({
@@ -100,6 +110,8 @@ class FamilyMemberModel {
     int? age,
     String? ageGroup,
     String? notes,
+    String? fitnessGoal,
+    String? pregnancyStage,
   }) {
     return FamilyMemberModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -111,6 +123,8 @@ class FamilyMemberModel {
       dislikes: [],
       favorites: [],
       notes: notes,
+      fitnessGoal: fitnessGoal,
+      pregnancyStage: pregnancyStage,
     );
   }
 

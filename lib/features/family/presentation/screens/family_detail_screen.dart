@@ -228,6 +228,35 @@ class _FamilyDetailScreenState extends ConsumerState<FamilyDetailScreen> {
     setState(() => _loadFamily());
   }
 
+  /// v1.2: 获取健身目标的营养提示
+  String _getFitnessNutritionHint(String goal) {
+    final ratios = fitnessNutritionRatios[goal];
+    if (ratios == null) return '';
+
+    final protein = ((ratios['proteinRatio'] as double) * 100).toInt();
+    final carb = ((ratios['carbRatio'] as double) * 100).toInt();
+    final fat = ((ratios['fatRatio'] as double) * 100).toInt();
+
+    final deficit = ratios['calorieDeficit'] as int?;
+    final surplus = ratios['calorieSurplus'] as int?;
+
+    String calorieInfo = '';
+    if (deficit != null && deficit > 0) {
+      calorieInfo = '，热量缺口 ${deficit}kcal';
+    } else if (surplus != null && surplus > 0) {
+      calorieInfo = '，热量盈余 ${surplus}kcal';
+    }
+
+    return '蛋白$protein% 碳水$carb% 脂肪$fat%$calorieInfo';
+  }
+
+  /// v1.2: 获取孕期阶段的营养提示
+  String _getPregnancyNutritionHint(String stage) {
+    final focus = pregnancyNutritionFocus[stage];
+    if (focus == null || focus.isEmpty) return '';
+    return '重点补充：${focus.join('、')}';
+  }
+
   void _showAddMemberDialog() {
     _showMemberDialog(null, null);
   }
@@ -248,6 +277,9 @@ class _FamilyDetailScreenState extends ConsumerState<FamilyDetailScreen> {
     List<String> selectedAllergies = member?.allergies.toList() ?? [];
     List<String> selectedTastePrefs = <String>[];
     List<String> selectedRestrictions = <String>[];
+    // v1.2: 健身目标和孕期阶段
+    String? selectedFitnessGoal = member?.fitnessGoal;
+    String? selectedPregnancyStage = member?.pregnancyStage;
 
     // 从 dislikes 中解析已有的口味偏好和饮食禁忌
     final existingDislikes = member?.dislikes.toList() ?? [];
@@ -384,6 +416,68 @@ class _FamilyDetailScreenState extends ConsumerState<FamilyDetailScreen> {
                         );
                       }).toList(),
                     );
+                  },
+                ),
+                const SizedBox(height: 24),
+
+                // v1.2: 健身目标（单选下拉）
+                const Text(
+                  '健身目标',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String?>(
+                  value: selectedFitnessGoal,
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.fitness_center),
+                    hintText: '选择健身目标（可选）',
+                    helperText: selectedFitnessGoal != null
+                        ? _getFitnessNutritionHint(selectedFitnessGoal!)
+                        : '选择后 AI 会根据目标调整营养配比',
+                    helperMaxLines: 2,
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('无健身目标'),
+                    ),
+                    ...fitnessGoalOptions.map((goal) {
+                      return DropdownMenuItem(value: goal, child: Text(goal));
+                    }),
+                  ],
+                  onChanged: (value) {
+                    setSheetState(() => selectedFitnessGoal = value);
+                  },
+                ),
+                const SizedBox(height: 24),
+
+                // v1.2: 孕期阶段（单选下拉）
+                const Text(
+                  '孕期阶段',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String?>(
+                  value: selectedPregnancyStage,
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.pregnant_woman),
+                    hintText: '选择孕期阶段（可选）',
+                    helperText: selectedPregnancyStage != null
+                        ? _getPregnancyNutritionHint(selectedPregnancyStage!)
+                        : '选择后 AI 会推荐该阶段所需营养',
+                    helperMaxLines: 2,
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('非孕期'),
+                    ),
+                    ...pregnancyStageOptions.map((stage) {
+                      return DropdownMenuItem(value: stage, child: Text(stage));
+                    }),
+                  ],
+                  onChanged: (value) {
+                    setSheetState(() => selectedPregnancyStage = value);
                   },
                 ),
                 const SizedBox(height: 24),
@@ -582,6 +676,8 @@ class _FamilyDetailScreenState extends ConsumerState<FamilyDetailScreen> {
                       allergies: selectedAllergies,
                       dislikes: combinedDislikes,
                       notes: notes.isEmpty ? null : notes,
+                      fitnessGoal: selectedFitnessGoal,
+                      pregnancyStage: selectedPregnancyStage,
                     );
 
                     final repository = ref.read(familyRepositoryProvider);
@@ -792,6 +888,56 @@ class _MemberCard extends StatelessWidget {
                     elevation: 0,
                   );
                 }).toList(),
+              ),
+            ],
+            // v1.2: 健身目标
+            if (member.fitnessGoal != null) ...[
+              const SizedBox(height: 8),
+              Chip(
+                avatar: Icon(
+                  Icons.fitness_center,
+                  size: 14,
+                  color: isDark ? Colors.green.shade300 : Colors.green.shade700,
+                ),
+                label: Text(
+                  member.fitnessGoal!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.green.shade300 : Colors.green.shade700,
+                  ),
+                ),
+                backgroundColor: isDark
+                    ? Colors.green.shade900.withOpacity(0.3)
+                    : Colors.green.shade50,
+                side: isDark ? BorderSide(color: Colors.green.shade700) : BorderSide.none,
+                padding: EdgeInsets.zero,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                elevation: 0,
+              ),
+            ],
+            // v1.2: 孕期阶段
+            if (member.pregnancyStage != null) ...[
+              const SizedBox(height: 8),
+              Chip(
+                avatar: Icon(
+                  Icons.pregnant_woman,
+                  size: 14,
+                  color: isDark ? Colors.pink.shade300 : Colors.pink.shade700,
+                ),
+                label: Text(
+                  member.pregnancyStage!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.pink.shade300 : Colors.pink.shade700,
+                  ),
+                ),
+                backgroundColor: isDark
+                    ? Colors.pink.shade900.withOpacity(0.3)
+                    : Colors.pink.shade50,
+                side: isDark ? BorderSide(color: Colors.pink.shade700) : BorderSide.none,
+                padding: EdgeInsets.zero,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                elevation: 0,
               ),
             ],
             if (member.allergies.isNotEmpty) ...[

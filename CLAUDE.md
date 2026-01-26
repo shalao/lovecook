@@ -26,14 +26,17 @@ flutter analyze
 # 生产构建
 flutter build web
 
-# 运行所有测试
-flutter test
+# 运行所有测试（需要绕过代理）
+NO_PROXY=localhost,127.0.0.1 flutter test
 
 # 运行单个测试文件
-flutter test test/core/services/ai_service_test.dart
+NO_PROXY=localhost,127.0.0.1 flutter test test/core/services/ai_service_test.dart
 
 # 运行特定测试组
-flutter test --plain-name "AIConfig"
+NO_PROXY=localhost,127.0.0.1 flutter test --plain-name "AIConfig"
+
+# 运行纯 Dart 测试（不需要 Flutter 环境）
+dart test test/core/services/ai_service_pure_dart_test.dart
 ```
 
 ## Architecture
@@ -143,8 +146,29 @@ UI (Screens) → Providers (Riverpod StateNotifier) → Repositories → Hive St
 - Chips 组件需要显式设置 `elevation: 0`, `shadowColor: Colors.transparent`, `surfaceTintColor: Colors.transparent` 以避免 Material 3 覆盖层问题
 - 使用 `Theme.of(context).brightness == Brightness.dark` 检测当前主题模式
 
-### 测试模式
+### 测试
 
 - 使用 `flutter_test` + `mockito` 进行单元测试
 - 使用 `http_mock_adapter` 模拟 AI API 请求
 - 测试文件位于 `test/` 目录，镜像 `lib/` 结构
+
+**重要：代理环境问题**
+
+如果系统设置了 HTTP_PROXY，Flutter 测试运行器会因为 localhost 连接被代理拦截而失败，报错：
+```
+HttpException: Connection closed before full header was received
+```
+
+解决方案：运行测试时添加 `NO_PROXY=localhost,127.0.0.1` 环境变量：
+```bash
+NO_PROXY=localhost,127.0.0.1 flutter test
+```
+
+**测试文件说明**
+
+| 文件 | 说明 |
+|------|------|
+| `ai_service_test.dart` | AI 服务单元测试（需要 Flutter 环境） |
+| `ai_service_pure_dart_test.dart` | AI 服务纯 Dart 测试（不依赖 Flutter） |
+| `recommend_settings_test.dart` | 推荐设置模型测试 |
+| `day_plan_test.dart` | 日计划和推荐状态测试 |

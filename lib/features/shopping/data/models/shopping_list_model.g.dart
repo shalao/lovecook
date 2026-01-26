@@ -74,13 +74,15 @@ class ShoppingItemModelAdapter extends TypeAdapter<ShoppingItemModel> {
       notes: fields[5] as String?,
       purchased: fields[6] as bool,
       source: fields[7] as String?,
+      needByDate: fields[8] as DateTime?,
+      usages: (fields[9] as List?)?.cast<IngredientUsage>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, ShoppingItemModel obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -96,7 +98,11 @@ class ShoppingItemModelAdapter extends TypeAdapter<ShoppingItemModel> {
       ..writeByte(6)
       ..write(obj.purchased)
       ..writeByte(7)
-      ..write(obj.source);
+      ..write(obj.source)
+      ..writeByte(8)
+      ..write(obj.needByDate)
+      ..writeByte(9)
+      ..write(obj.usages);
   }
 
   @override
@@ -106,6 +112,52 @@ class ShoppingItemModelAdapter extends TypeAdapter<ShoppingItemModel> {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is ShoppingItemModelAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
+}
+
+class IngredientUsageAdapter extends TypeAdapter<IngredientUsage> {
+  @override
+  final int typeId = 42;
+
+  @override
+  IngredientUsage read(BinaryReader reader) {
+    final numOfFields = reader.readByte();
+    final fields = <int, dynamic>{
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+    };
+    return IngredientUsage(
+      recipeName: fields[0] as String,
+      quantity: fields[1] as double,
+      unit: fields[2] as String,
+      useDate: fields[3] as DateTime,
+      mealType: fields[4] as String,
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, IngredientUsage obj) {
+    writer
+      ..writeByte(5)
+      ..writeByte(0)
+      ..write(obj.recipeName)
+      ..writeByte(1)
+      ..write(obj.quantity)
+      ..writeByte(2)
+      ..write(obj.unit)
+      ..writeByte(3)
+      ..write(obj.useDate)
+      ..writeByte(4)
+      ..write(obj.mealType);
+  }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is IngredientUsageAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

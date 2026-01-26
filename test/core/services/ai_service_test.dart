@@ -12,58 +12,44 @@ import 'package:love_cook/features/recipe/data/models/recipe_model.dart';
 void main() {
   group('AIConfig', () {
     test('should create with default values', () {
-      const config = AIConfig(apiKey: 'test-key');
+      const config = AIConfig();
 
-      expect(config.apiKey, 'test-key');
-      expect(config.baseUrl, 'https://api.openai.com/v1');
-      expect(config.model, 'gpt-4o');
+      expect(config.model, 'gpt-4o-mini');
       expect(config.visionModel, 'gpt-4o');
     });
 
     test('should create with custom values', () {
       const config = AIConfig(
-        apiKey: 'custom-key',
-        baseUrl: 'https://custom.api.com',
         model: 'gpt-3.5-turbo',
         visionModel: 'gpt-4-vision',
       );
 
-      expect(config.apiKey, 'custom-key');
-      expect(config.baseUrl, 'https://custom.api.com');
       expect(config.model, 'gpt-3.5-turbo');
       expect(config.visionModel, 'gpt-4-vision');
     });
 
-    test('isConfigured should return true when apiKey is not empty', () {
-      const config = AIConfig(apiKey: 'test-key');
+    test('isConfigured should always return true (using proxy service)', () {
+      const config = AIConfig();
       expect(config.isConfigured, true);
     });
 
-    test('isConfigured should return false when apiKey is empty', () {
-      const config = AIConfig(apiKey: '');
-      expect(config.isConfigured, false);
-    });
-
     test('copyWith should create new instance with updated values', () {
-      const original = AIConfig(apiKey: 'original-key');
-      final updated = original.copyWith(apiKey: 'new-key');
+      const original = AIConfig();
+      final updated = original.copyWith(model: 'new-model');
 
-      expect(updated.apiKey, 'new-key');
-      expect(updated.baseUrl, original.baseUrl);
-      expect(updated.model, original.model);
+      expect(updated.model, 'new-model');
+      expect(updated.visionModel, original.visionModel);
     });
 
     test('copyWith should keep original values when not specified', () {
       const original = AIConfig(
-        apiKey: 'key',
-        baseUrl: 'https://custom.api.com',
         model: 'custom-model',
+        visionModel: 'custom-vision',
       );
-      final updated = original.copyWith(apiKey: 'new-key');
+      final updated = original.copyWith(model: 'new-model');
 
-      expect(updated.apiKey, 'new-key');
-      expect(updated.baseUrl, 'https://custom.api.com');
-      expect(updated.model, 'custom-model');
+      expect(updated.model, 'new-model');
+      expect(updated.visionModel, 'custom-vision');
     });
   });
 
@@ -326,34 +312,19 @@ void main() {
   group('AIService', () {
     late Dio dio;
     late DioAdapter dioAdapter;
-    late AIService aiService;
+    late _TestableAIService aiService;
 
     setUp(() {
       dio = Dio(BaseOptions(baseUrl: 'https://api.openai.com/v1'));
       dioAdapter = DioAdapter(dio: dio);
       // 创建带有配置好的 Dio 的 AIService
       aiService = _TestableAIService(
-        config: const AIConfig(apiKey: 'test-key'),
+        config: const AIConfig(),
         dio: dio,
       );
     });
 
     group('recognizeIngredients', () {
-      test('should throw exception when API key is not configured', () async {
-        final unconfiguredService = AIService(
-          config: const AIConfig(apiKey: ''),
-        );
-
-        expect(
-          () => unconfiguredService.recognizeIngredients(Uint8List(0)),
-          throwsA(isA<AIServiceException>().having(
-            (e) => e.message,
-            'message',
-            'API 密钥未配置',
-          )),
-        );
-      });
-
       test('should parse successful response', () async {
         final responseJson = {
           'choices': [
@@ -409,17 +380,6 @@ void main() {
     });
 
     group('parseIngredientText', () {
-      test('should throw exception when API key is not configured', () async {
-        final unconfiguredService = AIService(
-          config: const AIConfig(apiKey: ''),
-        );
-
-        expect(
-          () => unconfiguredService.parseIngredientText('三根胡萝卜'),
-          throwsA(isA<AIServiceException>()),
-        );
-      });
-
       test('should parse text input successfully', () async {
         final responseJson = {
           'choices': [
@@ -510,22 +470,6 @@ void main() {
             updatedAt: DateTime.now(),
           ),
         ];
-      });
-
-      test('should throw exception when API key is not configured', () async {
-        final unconfiguredService = AIService(
-          config: const AIConfig(apiKey: ''),
-        );
-
-        expect(
-          () => unconfiguredService.generateMealPlan(
-            family: testFamily,
-            inventory: testInventory,
-            days: 1,
-            mealTypes: ['午餐'],
-          ),
-          throwsA(isA<AIServiceException>()),
-        );
       });
 
       test('should generate meal plan successfully', () async {
@@ -837,16 +781,6 @@ void main() {
         expect(result, '这是 AI 的回复');
       });
 
-      test('should throw exception when API key is not configured', () async {
-        final unconfiguredService = AIService(
-          config: const AIConfig(apiKey: ''),
-        );
-
-        expect(
-          () => unconfiguredService.chatCompletion(messages: []),
-          throwsA(isA<AIServiceException>()),
-        );
-      });
     });
 
     group('error handling', () {
@@ -882,7 +816,7 @@ void main() {
 
         expect(
           () => aiService.parseIngredientText('测试'),
-          throwsA(isA<DioException>()),
+          throwsA(isA<AIServiceException>()),
         );
       });
     });
@@ -948,22 +882,18 @@ String _extractJsonHelper(String text) {
   return cleaned;
 }
 
-/// 可测试的 AIService 子类，允许注入 Dio 实例
-class _TestableAIService extends AIService {
+/// 可测试的 AIService 类，允许注入 Dio 实例（不继承 AIService 以避免 proxyService 依赖）
+class _TestableAIService {
   final Dio _testDio;
+  final AIConfig config;
 
   _TestableAIService({
-    required super.config,
+    required this.config,
     required Dio dio,
   }) : _testDio = dio;
 
-  @override
   Future<List<IngredientRecognition>> recognizeIngredients(
       Uint8List imageBytes) async {
-    if (!config.isConfigured) {
-      throw AIServiceException('API 密钥未配置');
-    }
-
     final base64Image = base64Encode(imageBytes);
 
     try {
@@ -1003,12 +933,7 @@ class _TestableAIService extends AIService {
     }
   }
 
-  @override
-  Future<List<IngredientRecognition>> parseIngredientText(String text) async {
-    if (!config.isConfigured) {
-      throw AIServiceException('API 密钥未配置');
-    }
-
+    Future<List<IngredientRecognition>> parseIngredientText(String text) async {
     try {
       final response = await _testDio.post('/chat/completions', data: {
         'model': config.model,
@@ -1029,8 +954,7 @@ class _TestableAIService extends AIService {
     }
   }
 
-  @override
-  Future<MenuPlanResult> generateMealPlan({
+    Future<MenuPlanResult> generateMealPlan({
     required FamilyModel family,
     required List<IngredientModel> inventory,
     required int days,
@@ -1042,10 +966,6 @@ class _TestableAIService extends AIService {
     List<String>? dislikedRecipes,
     List<String>? favoriteRecipes,
   }) async {
-    if (!config.isConfigured) {
-      throw AIServiceException('API 密钥未配置');
-    }
-
     try {
       final response = await _testDio.post('/chat/completions', data: {
         'model': config.model,
@@ -1067,16 +987,11 @@ class _TestableAIService extends AIService {
     }
   }
 
-  @override
-  Future<List<RecipeModel>> suggestRecipes({
+    Future<List<RecipeModel>> suggestRecipes({
     required List<IngredientModel> inventory,
     required FamilyModel family,
     int count = 5,
   }) async {
-    if (!config.isConfigured) {
-      throw AIServiceException('API 密钥未配置');
-    }
-
     try {
       final response = await _testDio.post('/chat/completions', data: {
         'model': config.model,
@@ -1098,15 +1013,10 @@ class _TestableAIService extends AIService {
     }
   }
 
-  @override
-  Future<RecipeModel> generateRecipe({
+    Future<RecipeModel> generateRecipe({
     required String dishName,
     required FamilyModel family,
   }) async {
-    if (!config.isConfigured) {
-      throw AIServiceException('API 密钥未配置');
-    }
-
     try {
       final response = await _testDio.post('/chat/completions', data: {
         'model': config.model,
@@ -1127,12 +1037,7 @@ class _TestableAIService extends AIService {
     }
   }
 
-  @override
-  Future<NutritionInfoModel> analyzeNutrition(RecipeModel recipe) async {
-    if (!config.isConfigured) {
-      throw AIServiceException('API 密钥未配置');
-    }
-
+    Future<NutritionInfoModel> analyzeNutrition(RecipeModel recipe) async {
     try {
       final response = await _testDio.post('/chat/completions', data: {
         'model': config.model,
@@ -1160,16 +1065,11 @@ class _TestableAIService extends AIService {
     }
   }
 
-  @override
-  Future<String> chatCompletion({
+    Future<String> chatCompletion({
     required List<Map<String, dynamic>> messages,
     int maxTokens = 500,
     double temperature = 0.7,
   }) async {
-    if (!config.isConfigured) {
-      throw AIServiceException('API 密钥未配置');
-    }
-
     try {
       final response = await _testDio.post('/chat/completions', data: {
         'model': config.model,

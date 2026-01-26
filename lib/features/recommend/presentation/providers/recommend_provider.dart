@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
@@ -10,9 +11,21 @@ import '../../../inventory/data/models/ingredient_model.dart';
 import '../../../inventory/presentation/providers/inventory_provider.dart';
 import '../../../menu/data/models/meal_plan_model.dart';
 import '../../../menu/data/repositories/meal_plan_repository.dart';
+import '../../../menu/presentation/providers/menu_provider.dart';
 import '../../../recipe/data/models/recipe_model.dart';
+import '../../../shopping/data/models/shopping_list_model.dart';
+import '../../../shopping/data/repositories/shopping_list_repository.dart';
 import '../../../recipe/data/repositories/recipe_repository.dart';
 import '../../data/models/recommend_settings.dart';
+
+/// 推荐页视图模式
+enum RecommendViewMode {
+  /// 生成推荐模式（无已确认菜单时显示）
+  generate,
+
+  /// 已确认菜单模式（显示已保存的菜单）
+  confirmed,
+}
 
 /// 单餐推荐数据
 class MealRecommend {
@@ -115,7 +128,14 @@ class RecommendState {
   final String? globalError;
   final RecommendSettings settings;
 
-  const RecommendState({
+  // v1.2 新增：已确认菜单相关字段
+  final RecommendViewMode viewMode;
+  final MealPlanModel? confirmedPlan; // 已确认的菜单
+  final List<DayPlan> confirmedDayPlans; // 已确认菜单转换后的 DayPlan
+  final String currentMealType; // 当前餐次（根据时间自动判断）
+  final DateTime selectedDate; // 当前选中的日期
+
+  RecommendState({
     this.breakfast = const MealRecommend(type: 'breakfast', typeName: '早餐'),
     this.lunch = const MealRecommend(type: 'lunch', typeName: '午餐'),
     this.dinner = const MealRecommend(type: 'dinner', typeName: '晚餐'),
@@ -123,8 +143,15 @@ class RecommendState {
     this.dayPlans = const [],
     this.isInitialLoading = false,
     this.globalError,
-    this.settings = const RecommendSettings(),
-  });
+    RecommendSettings? settings,
+    // v1.2 新增字段默认值
+    this.viewMode = RecommendViewMode.generate,
+    this.confirmedPlan,
+    this.confirmedDayPlans = const [],
+    this.currentMealType = 'lunch',
+    DateTime? selectedDate,
+  })  : settings = settings ?? RecommendSettings(),
+        selectedDate = selectedDate ?? DateTime.now();
 
   RecommendState copyWith({
     MealRecommend? breakfast,
@@ -136,6 +163,13 @@ class RecommendState {
     String? globalError,
     bool clearGlobalError = false,
     RecommendSettings? settings,
+    // v1.2 新增字段
+    RecommendViewMode? viewMode,
+    MealPlanModel? confirmedPlan,
+    bool clearConfirmedPlan = false,
+    List<DayPlan>? confirmedDayPlans,
+    String? currentMealType,
+    DateTime? selectedDate,
   }) {
     return RecommendState(
       breakfast: breakfast ?? this.breakfast,
@@ -146,6 +180,12 @@ class RecommendState {
       isInitialLoading: isInitialLoading ?? this.isInitialLoading,
       globalError: clearGlobalError ? null : (globalError ?? this.globalError),
       settings: settings ?? this.settings,
+      // v1.2 新增字段
+      viewMode: viewMode ?? this.viewMode,
+      confirmedPlan: clearConfirmedPlan ? null : (confirmedPlan ?? this.confirmedPlan),
+      confirmedDayPlans: confirmedDayPlans ?? this.confirmedDayPlans,
+      currentMealType: currentMealType ?? this.currentMealType,
+      selectedDate: selectedDate ?? this.selectedDate,
     );
   }
 
@@ -181,38 +221,219 @@ class RecommendState {
         return breakfast;
     }
   }
+
+  /// v1.2: 是否处于已确认菜单模式
+  bool get isConfirmedMode => viewMode == RecommendViewMode.confirmed;
+
+  /// v1.2: 获取当前选中日期的 DayPlan
+  DayPlan? get selectedDayPlan {
+    if (confirmedDayPlans.isEmpty) return null;
+    final normalizedSelected = DateTime(
+      selectedDate.year,
+      selectedDate.month,
+      selectedDate.day,
+    );
+    return confirmedDayPlans.cast<DayPlan?>().firstWhere(
+          (d) =>
+              d != null &&
+              d.date.year == normalizedSelected.year &&
+              d.date.month == normalizedSelected.month &&
+              d.date.day == normalizedSelected.day,
+          orElse: () => null,
+        );
+  }
+
+  /// v1.2: 已确认菜单是否有今天或未来的内容
+  bool get hasValidConfirmedPlan {
+    if (confirmedDayPlans.isEmpty) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return confirmedDayPlans.any((d) =>
+        d.date.isAfter(today.subtract(const Duration(days: 1))) &&
+        d.hasAnyRecipes);
+  }
 }
 
 /// 今日推荐通知器
 class RecommendNotifier extends StateNotifier<RecommendState> {
+  final Ref _ref;
   final AIService _aiService;
   final FamilyModel? _currentFamily;
   final List<IngredientModel> _inventory;
   final MealHistoryRepository _historyRepository;
   final RecipeRepository _recipeRepository;
   final MealPlanRepository _mealPlanRepository;
+  final ShoppingListRepository _shoppingListRepository;
   final StorageService _storage;
 
   RecommendNotifier({
+    required Ref ref,
     required AIService aiService,
     required FamilyModel? currentFamily,
     required List<IngredientModel> inventory,
     required MealHistoryRepository historyRepository,
     required RecipeRepository recipeRepository,
     required MealPlanRepository mealPlanRepository,
+    required ShoppingListRepository shoppingListRepository,
     required StorageService storage,
-  })  : _aiService = aiService,
+  })  : _ref = ref,
+        _aiService = aiService,
         _currentFamily = currentFamily,
         _inventory = inventory,
         _historyRepository = historyRepository,
         _recipeRepository = recipeRepository,
         _mealPlanRepository = mealPlanRepository,
+        _shoppingListRepository = shoppingListRepository,
         _storage = storage,
         super(RecommendState(
           settings: currentFamily != null
               ? RecommendSettings.withFamilySize(currentFamily.members.length)
-              : const RecommendSettings(),
-        ));
+              : RecommendSettings(),
+          currentMealType: _getCurrentMealTypeStatic(),
+          selectedDate: DateTime.now(),
+        )) {
+    // 初始化时加载已确认的菜单
+    _initializeConfirmedPlan();
+  }
+
+  /// 静态方法：根据当前时间判断餐次
+  static String _getCurrentMealTypeStatic() {
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 10) return 'breakfast';
+    if (hour >= 10 && hour < 14) return 'lunch';
+    if (hour >= 14 && hour < 21) return 'dinner';
+    return 'dinner'; // 深夜默认显示晚餐
+  }
+
+  /// 初始化：加载已确认的菜单
+  Future<void> _initializeConfirmedPlan() async {
+    if (_currentFamily == null) return;
+
+    try {
+      // 从 MealPlanRepository 获取当前家庭的菜单
+      // 首先尝试获取当前有效菜单，如果没有则获取最新的菜单
+      MealPlanModel? plan = _mealPlanRepository.getCurrentMealPlan(_currentFamily.id);
+      if (plan == null) {
+        final plans = _mealPlanRepository.getMealPlansByFamily(_currentFamily.id);
+        if (plans.isNotEmpty) {
+          plan = plans.first; // 已按创建时间排序，取最新的
+        }
+      }
+
+      if (plan != null && _hasTodayOrFutureMeals(plan)) {
+        // 有有效菜单，转换为 DayPlan 列表
+        final confirmedDayPlans = _convertMealPlanToDayPlans(plan);
+
+        if (confirmedDayPlans.isNotEmpty) {
+          state = state.copyWith(
+            viewMode: RecommendViewMode.confirmed,
+            confirmedPlan: plan,
+            confirmedDayPlans: confirmedDayPlans,
+            currentMealType: _getCurrentMealTypeStatic(),
+            selectedDate: DateTime.now(),
+          );
+          return;
+        }
+      }
+
+      // 无有效菜单，保持生成模式
+      state = state.copyWith(
+        viewMode: RecommendViewMode.generate,
+      );
+    } catch (e) {
+      print('加载已确认菜单失败: $e');
+      state = state.copyWith(viewMode: RecommendViewMode.generate);
+    }
+  }
+
+  /// 检查菜单是否包含今天或未来的餐次
+  bool _hasTodayOrFutureMeals(MealPlanModel plan) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return plan.days.any((day) {
+      final dayDate = DateTime(day.date.year, day.date.month, day.date.day);
+      return !dayDate.isBefore(today) && day.meals.isNotEmpty;
+    });
+  }
+
+  /// 将 MealPlanModel 转换为 DayPlan 列表
+  List<DayPlan> _convertMealPlanToDayPlans(MealPlanModel plan) {
+    final dayPlans = <DayPlan>[];
+
+    for (int i = 0; i < plan.days.length; i++) {
+      final dayModel = plan.days[i];
+
+      MealRecommend breakfast = const MealRecommend(type: 'breakfast', typeName: '早餐');
+      MealRecommend lunch = const MealRecommend(type: 'lunch', typeName: '午餐');
+      MealRecommend dinner = const MealRecommend(type: 'dinner', typeName: '晚餐');
+      MealRecommend snacks = const MealRecommend(type: 'snacks', typeName: '甜点');
+
+      for (final meal in dayModel.meals) {
+        // 从 recipeIds 获取菜谱详情
+        final recipes = <RecipeModel>[];
+        for (final recipeId in meal.recipeIds) {
+          final recipe = _recipeRepository.getRecipeById(recipeId);
+          if (recipe != null) {
+            recipes.add(recipe);
+          }
+        }
+
+        switch (meal.type.toLowerCase()) {
+          case 'breakfast':
+          case '早餐':
+            breakfast = breakfast.copyWith(recipes: recipes);
+            break;
+          case 'lunch':
+          case '午餐':
+            lunch = lunch.copyWith(recipes: recipes);
+            break;
+          case 'dinner':
+          case '晚餐':
+            dinner = dinner.copyWith(recipes: recipes);
+            break;
+          case 'snack':
+          case 'snacks':
+          case '加餐':
+          case '甜点':
+            snacks = snacks.copyWith(recipes: recipes);
+            break;
+        }
+      }
+
+      dayPlans.add(DayPlan(
+        dayIndex: i,
+        date: dayModel.date,
+        breakfast: breakfast,
+        lunch: lunch,
+        dinner: dinner,
+        snacks: snacks,
+      ));
+    }
+
+    return dayPlans;
+  }
+
+  /// 切换到生成模式
+  void switchToGenerateMode() {
+    state = state.copyWith(viewMode: RecommendViewMode.generate);
+  }
+
+  /// 切换到已确认模式（如果有有效菜单）
+  void switchToConfirmedMode() {
+    if (state.hasValidConfirmedPlan) {
+      state = state.copyWith(viewMode: RecommendViewMode.confirmed);
+    }
+  }
+
+  /// 更新选中的日期
+  void selectDate(DateTime date) {
+    state = state.copyWith(selectedDate: date);
+  }
+
+  /// 刷新已确认菜单（重新从数据库加载）
+  Future<void> refreshConfirmedPlan() async {
+    await _initializeConfirmedPlan();
+  }
 
   /// 获取避重天数设置
   int get _avoidRecentDays {
@@ -245,6 +466,13 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
         dinner: dinner,
         snacks: snacks,
       ),
+    );
+  }
+
+  /// v1.2: 更新菜单开始日期
+  void updateStartDate(DateTime date) {
+    state = state.copyWith(
+      settings: state.settings.copyWith(startDate: date),
     );
   }
 
@@ -321,13 +549,17 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
 
       // 解析结果 - 按天分组
       final dayPlans = <DayPlan>[];
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
+      // v1.2: 使用设置中的 startDate，而非今天
+      final startDate = DateTime(
+        settings.startDate.year,
+        settings.startDate.month,
+        settings.startDate.day,
+      );
 
       if (result.days.isNotEmpty) {
         for (int i = 0; i < result.days.length; i++) {
           final dayData = result.days[i];
-          final date = today.add(Duration(days: i));
+          final date = startDate.add(Duration(days: i));
 
           MealRecommend breakfast = const MealRecommend(type: 'breakfast', typeName: '早餐');
           MealRecommend lunch = const MealRecommend(type: 'lunch', typeName: '午餐');
@@ -589,14 +821,16 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
 
     try {
       final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
+      // v1.2: 使用 dayPlans 中的实际日期范围
+      final startDate = state.dayPlans.first.date;
+      final endDate = state.dayPlans.last.date;
 
       // 创建 MealPlanModel
       final plan = MealPlanModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         familyId: _currentFamily!.id,
-        startDate: today,
-        endDate: today.add(Duration(days: state.dayPlans.length - 1)),
+        startDate: startDate,
+        endDate: endDate,
         days: [],
         createdAt: now,
         notes: _buildNutritionSummary(),
@@ -643,10 +877,111 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
 
       // 保存到 MealPlanRepository
       await _mealPlanRepository.saveMealPlan(plan);
+
+      // v1.2: 保存成功后自动切换到已确认模式
+      state = state.copyWith(
+        viewMode: RecommendViewMode.confirmed,
+        confirmedPlan: plan,
+        confirmedDayPlans: state.dayPlans, // 使用当前生成的 dayPlans
+        currentMealType: _getCurrentMealTypeStatic(),
+        selectedDate: startDate, // 使用菜单的开始日期
+      );
+
+      // 通知其他 Provider 刷新
+      _ref.invalidate(mealPlanRepositoryProvider);
+      _ref.invalidate(menuListProvider);
+
       return true;
     } catch (e) {
-      print('保存菜单历史失败: $e');
+      // 保存失败，保持当前状态
+      debugPrint('保存菜单历史失败: $e');
       return false;
+    }
+  }
+
+  /// v1.2: 从已确认菜单生成购物清单
+  /// 返回生成的购物清单 ID，如果失败返回 null
+  /// 如果已有关联清单则更新，否则创建新的
+  /// v1.2.1: 带日期和用量溯源信息
+  Future<String?> generateShoppingListFromConfirmedMenu() async {
+    if (_currentFamily == null) return null;
+    if (state.confirmedDayPlans.isEmpty) return null;
+
+    try {
+      // 收集所有菜谱，并附带日期和餐次信息
+      final recipesWithDates = <RecipeWithDateInfo>[];
+      for (final dayPlan in state.confirmedDayPlans) {
+        // 早餐
+        for (final recipe in dayPlan.breakfast.recipes) {
+          recipesWithDates.add(RecipeWithDateInfo(
+            recipe: recipe,
+            date: dayPlan.date,
+            mealType: 'breakfast',
+          ));
+        }
+        // 午餐
+        for (final recipe in dayPlan.lunch.recipes) {
+          recipesWithDates.add(RecipeWithDateInfo(
+            recipe: recipe,
+            date: dayPlan.date,
+            mealType: 'lunch',
+          ));
+        }
+        // 晚餐
+        for (final recipe in dayPlan.dinner.recipes) {
+          recipesWithDates.add(RecipeWithDateInfo(
+            recipe: recipe,
+            date: dayPlan.date,
+            mealType: 'dinner',
+          ));
+        }
+        // 加餐/甜点
+        for (final recipe in dayPlan.snacks.recipes) {
+          recipesWithDates.add(RecipeWithDateInfo(
+            recipe: recipe,
+            date: dayPlan.date,
+            mealType: 'snacks',
+          ));
+        }
+      }
+
+      if (recipesWithDates.isEmpty) return null;
+
+      final mealPlanId = state.confirmedPlan?.id;
+
+      // 检查是否已有关联的购物清单
+      ShoppingListModel? existingList;
+      if (mealPlanId != null) {
+        existingList = _shoppingListRepository.getShoppingListByMealPlanId(mealPlanId);
+      }
+
+      if (existingList != null) {
+        // 更新已有购物清单（带日期信息）
+        await _shoppingListRepository.updateShoppingListItemsWithDates(
+          shoppingListId: existingList.id,
+          recipesWithDates: recipesWithDates,
+          inventory: _inventory,
+        );
+        _ref.invalidate(shoppingListRepositoryProvider);
+        _ref.invalidate(familyShoppingListsProvider(_currentFamily.id));
+        return existingList.id;
+      } else {
+        // 创建新的购物清单（带日期和用量溯源）
+        final shoppingList = _shoppingListRepository.generateFromRecipesWithDates(
+          familyId: _currentFamily.id,
+          recipesWithDates: recipesWithDates,
+          inventory: _inventory,
+          mealPlanId: mealPlanId,
+        );
+
+        await _shoppingListRepository.saveShoppingList(shoppingList);
+        _ref.invalidate(shoppingListRepositoryProvider);
+        _ref.invalidate(familyShoppingListsProvider(_currentFamily.id));
+        return shoppingList.id;
+      }
+    } catch (e) {
+      debugPrint('生成购物清单失败: $e');
+      return null;
     }
   }
 
@@ -673,15 +1008,18 @@ final recommendProvider =
   final historyRepository = ref.watch(mealHistoryRepositoryProvider);
   final recipeRepository = ref.watch(recipeRepositoryProvider);
   final mealPlanRepository = ref.watch(mealPlanRepositoryProvider);
+  final shoppingListRepository = ref.watch(shoppingListRepositoryProvider);
   final storage = ref.watch(storageServiceProvider);
 
   return RecommendNotifier(
+    ref: ref,
     aiService: aiService,
     currentFamily: currentFamily,
     inventory: inventoryState.ingredients,
     historyRepository: historyRepository,
     recipeRepository: recipeRepository,
     mealPlanRepository: mealPlanRepository,
+    shoppingListRepository: shoppingListRepository,
     storage: storage,
   );
 });

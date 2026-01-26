@@ -7,7 +7,6 @@ import '../../../../app/router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../family/data/repositories/family_repository.dart';
 import '../../../inventory/data/models/ingredient_model.dart';
-import '../../../inventory/data/models/ingredient_category_map.dart';
 import '../../../inventory/presentation/providers/inventory_provider.dart';
 import '../../data/models/shopping_list_model.dart';
 import '../../data/repositories/shopping_list_repository.dart';
@@ -227,7 +226,7 @@ class _ShoppingListTab extends ConsumerWidget {
             ),
           ),
           ElevatedButton.icon(
-            onPressed: () => _showAddToInventoryDialog(context, ref, purchasedItems),
+            onPressed: () => _showAddToInventoryDialog(context, ref, purchasedItems, list),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
@@ -240,83 +239,32 @@ class _ShoppingListTab extends ConsumerWidget {
     );
   }
 
-  /// 显示入库确认对话框
+  /// 显示入库确认对话框（支持多选）
   void _showAddToInventoryDialog(
     BuildContext context,
     WidgetRef ref,
     List<ShoppingItemModel> purchasedItems,
+    ShoppingListModel shoppingList,
   ) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('添加到家中库存'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '以下 ${purchasedItems.length} 项已购食材将添加到库存：',
-                style: TextStyle(
-                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 300),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: purchasedItems.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final item = purchasedItems[index];
-                    return ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(
-                        _getCategoryIcon(item.category ?? '其他'),
-                        color: AppColors.primary,
-                        size: 20,
-                      ),
-                      title: Text(item.name),
-                      trailing: Text(
-                        item.quantityFormatted,
-                        style: TextStyle(
-                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              await _addToInventory(context, ref, purchasedItems);
-            },
-            child: const Text('确认入库'),
-          ),
-        ],
+      builder: (dialogContext) => _AddToInventoryDialog(
+        purchasedItems: purchasedItems,
+        shoppingList: shoppingList,
+        onConfirm: (selectedItems) async {
+          Navigator.pop(dialogContext);
+          await _addToInventory(context, ref, selectedItems, shoppingList);
+        },
       ),
     );
   }
 
-  /// 将购物项添加到库存
+  /// 将购物项添加到库存，并从购物清单移除
   Future<void> _addToInventory(
     BuildContext context,
     WidgetRef ref,
     List<ShoppingItemModel> items,
+    ShoppingListModel shoppingList,
   ) async {
     // 显示加载对话框
     showDialog(
@@ -334,7 +282,8 @@ class _ShoppingListTab extends ConsumerWidget {
     );
 
     try {
-      final notifier = ref.read(inventoryProvider.notifier);
+      final inventoryNotifier = ref.read(inventoryProvider.notifier);
+      final shoppingRepo = ref.read(shoppingListRepositoryProvider);
       int successCount = 0;
 
       for (final item in items) {
@@ -350,9 +299,15 @@ class _ShoppingListTab extends ConsumerWidget {
           expiryDate: _getDefaultExpiryDate(item.category ?? '其他'),
         );
 
-        await notifier.addIngredient(ingredient);
+        await inventoryNotifier.addIngredient(ingredient);
+
+        // 从购物清单移除已入库的项目
+        await shoppingRepo.removeItem(shoppingList.id, item.id);
         successCount++;
       }
+
+      // 刷新购物清单
+      ref.invalidate(familyShoppingListsProvider(familyId));
 
       if (context.mounted) {
         Navigator.pop(context); // 关闭加载对话框
@@ -400,31 +355,6 @@ class _ShoppingListTab extends ConsumerWidget {
         return now.add(const Duration(days: 90));
       default:
         return now.add(const Duration(days: 7));
-    }
-  }
-
-  IconData _getCategoryIcon(String category) {
-    switch (category) {
-      case '蔬菜':
-        return Icons.grass;
-      case '水果':
-        return Icons.apple;
-      case '肉类':
-        return Icons.set_meal;
-      case '海鲜':
-        return Icons.waves;
-      case '蛋奶':
-        return Icons.egg;
-      case '豆制品':
-        return Icons.grain;
-      case '主食':
-        return Icons.rice_bowl;
-      case '调味料':
-        return Icons.water_drop;
-      case '干货':
-        return Icons.inventory_2;
-      default:
-        return Icons.shopping_basket;
     }
   }
 
@@ -718,7 +648,13 @@ class _InventoryCategory extends StatelessWidget {
   }
 }
 
-class _ShoppingListContent extends StatelessWidget {
+/// 购物清单分组模式
+enum ShoppingListGroupMode {
+  urgency, // 按紧急度分组
+  category, // 按类别分组
+}
+
+class _ShoppingListContent extends StatefulWidget {
   final ShoppingListModel shoppingList;
   final Function(String) onTogglePurchased;
 
@@ -728,8 +664,98 @@ class _ShoppingListContent extends StatelessWidget {
   });
 
   @override
+  State<_ShoppingListContent> createState() => _ShoppingListContentState();
+}
+
+class _ShoppingListContentState extends State<_ShoppingListContent> {
+  ShoppingListGroupMode _groupMode = ShoppingListGroupMode.urgency;
+
+  @override
   Widget build(BuildContext context) {
-    final grouped = shoppingList.groupedByCategory;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // 检查是否有紧急度信息
+    final hasUrgencyInfo = widget.shoppingList.items.any((item) => item.needByDate != null);
+
+    return Column(
+      children: [
+        // 分组模式切换（仅当有紧急度信息时显示）
+        if (hasUrgencyInfo)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Text(
+                  '分组方式：',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SegmentedButton<ShoppingListGroupMode>(
+                  segments: const [
+                    ButtonSegment(
+                      value: ShoppingListGroupMode.urgency,
+                      label: Text('按紧急度'),
+                      icon: Icon(Icons.schedule, size: 16),
+                    ),
+                    ButtonSegment(
+                      value: ShoppingListGroupMode.category,
+                      label: Text('按类别'),
+                      icon: Icon(Icons.category, size: 16),
+                    ),
+                  ],
+                  selected: {_groupMode},
+                  onSelectionChanged: (newSelection) {
+                    setState(() {
+                      _groupMode = newSelection.first;
+                    });
+                  },
+                  style: ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        // 列表内容
+        Expanded(
+          child: _groupMode == ShoppingListGroupMode.urgency && hasUrgencyInfo
+              ? _buildUrgencyView()
+              : _buildCategoryView(),
+        ),
+      ],
+    );
+  }
+
+  /// 按紧急度分组视图
+  Widget _buildUrgencyView() {
+    final grouped = widget.shoppingList.groupedByUrgency;
+    final urgencyOrder = ['urgent', 'soon', 'later'];
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: urgencyOrder.length,
+      itemBuilder: (context, index) {
+        final level = urgencyOrder[index];
+        final items = grouped[level] ?? [];
+
+        if (items.isEmpty) return const SizedBox.shrink();
+
+        return _UrgencySection(
+          urgencyLevel: level,
+          items: items,
+          onTogglePurchased: widget.onTogglePurchased,
+        );
+      },
+    );
+  }
+
+  /// 按类别分组视图
+  Widget _buildCategoryView() {
+    final grouped = widget.shoppingList.groupedByCategory;
     final categories = grouped.keys.toList();
 
     return ListView.builder(
@@ -742,9 +768,265 @@ class _ShoppingListContent extends StatelessWidget {
         return _CategorySection(
           category: category,
           items: items,
-          onTogglePurchased: onTogglePurchased,
+          onTogglePurchased: widget.onTogglePurchased,
         );
       },
+    );
+  }
+}
+
+/// 按紧急度分组的区块
+class _UrgencySection extends StatelessWidget {
+  final String urgencyLevel;
+  final List<ShoppingItemModel> items;
+  final Function(String) onTogglePurchased;
+
+  const _UrgencySection({
+    required this.urgencyLevel,
+    required this.items,
+    required this.onTogglePurchased,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorValue = ShoppingListModel.getUrgencyColorValue(urgencyLevel);
+    final color = Color(colorValue);
+    final label = ShoppingListModel.getUrgencyLabel(urgencyLevel);
+
+    // 紧急度图标
+    IconData icon;
+    switch (urgencyLevel) {
+      case 'urgent':
+        icon = Icons.warning_amber;
+        break;
+      case 'soon':
+        icon = Icons.schedule;
+        break;
+      default:
+        icon = Icons.check_circle_outline;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: color),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: color.withAlpha(26),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${items.length}项',
+                  style: TextStyle(fontSize: 12, color: color),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Card(
+          margin: const EdgeInsets.only(bottom: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            children: items.asMap().entries.map((entry) {
+              final index = entry.key;
+              final item = entry.value;
+              final isLast = index == items.length - 1;
+
+              return _ShoppingItemTile(
+                item: item,
+                isLast: isLast,
+                onTogglePurchased: onTogglePurchased,
+                showUsageDetails: true,
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 购物项 Tile（支持展开用量明细）
+class _ShoppingItemTile extends StatefulWidget {
+  final ShoppingItemModel item;
+  final bool isLast;
+  final Function(String) onTogglePurchased;
+  final bool showUsageDetails;
+
+  const _ShoppingItemTile({
+    required this.item,
+    required this.isLast,
+    required this.onTogglePurchased,
+    this.showUsageDetails = false,
+  });
+
+  @override
+  State<_ShoppingItemTile> createState() => _ShoppingItemTileState();
+}
+
+class _ShoppingItemTileState extends State<_ShoppingItemTile> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final item = widget.item;
+    final hasUsages = widget.showUsageDetails && item.usages != null && item.usages!.isNotEmpty;
+
+    return Container(
+      decoration: BoxDecoration(
+        border: widget.isLast
+            ? null
+            : Border(
+                bottom: BorderSide(color: isDark ? AppColors.borderDark : Colors.grey[200]!),
+              ),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            leading: GestureDetector(
+              onTap: () => widget.onTogglePurchased(item.id),
+              child: Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: item.purchased ? Colors.green : Colors.transparent,
+                  border: Border.all(
+                    color: item.purchased ? Colors.green : (isDark ? AppColors.textTertiaryDark : Colors.grey[400]!),
+                    width: 2,
+                  ),
+                ),
+                child: item.purchased
+                    ? const Icon(Icons.check, size: 16, color: Colors.white)
+                    : null,
+              ),
+            ),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    item.name,
+                    style: TextStyle(
+                      decoration: item.purchased ? TextDecoration.lineThrough : null,
+                      color: item.purchased
+                          ? (isDark ? AppColors.textTertiaryDark : Colors.grey)
+                          : (isDark ? AppColors.textPrimaryDark : null),
+                    ),
+                  ),
+                ),
+                // 显示需求日期（如果有）
+                if (item.needByDate != null && !item.purchased)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    margin: const EdgeInsets.only(left: 8),
+                    decoration: BoxDecoration(
+                      color: Color(ShoppingListModel.getUrgencyColorValue(item.getUrgencyLevel())).withAlpha(20),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '${item.needByDate!.month}/${item.needByDate!.day}前',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Color(ShoppingListModel.getUrgencyColorValue(item.getUrgencyLevel())),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  item.quantityFormatted,
+                  style: TextStyle(
+                    color: item.purchased
+                        ? (isDark ? AppColors.textTertiaryDark : Colors.grey)
+                        : (isDark ? AppColors.textSecondaryDark : Colors.grey[600]),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                // 展开/收起按钮（仅当有用量明细时显示）
+                if (hasUsages)
+                  IconButton(
+                    icon: Icon(
+                      _isExpanded ? Icons.expand_less : Icons.expand_more,
+                      size: 20,
+                      color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _isExpanded = !_isExpanded;
+                      });
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+              ],
+            ),
+            onTap: () => widget.onTogglePurchased(item.id),
+          ),
+
+          // 用量明细（展开状态）
+          if (hasUsages && _isExpanded)
+            Container(
+              padding: const EdgeInsets.only(left: 56, right: 16, bottom: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '用量明细：',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  ...item.usages!.map((usage) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.restaurant,
+                              size: 14,
+                              color: isDark ? AppColors.textTertiaryDark : Colors.grey[500],
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                usage.fullDescription,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark ? AppColors.textTertiaryDark : Colors.grey[600],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -762,7 +1044,6 @@ class _CategorySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -813,57 +1094,11 @@ class _CategorySection extends StatelessWidget {
               final item = entry.value;
               final isLast = index == items.length - 1;
 
-              return Container(
-                decoration: BoxDecoration(
-                  border: isLast
-                      ? null
-                      : Border(
-                          bottom: BorderSide(color: isDark ? AppColors.borderDark : Colors.grey[200]!),
-                        ),
-                ),
-                child: ListTile(
-                  leading: GestureDetector(
-                    onTap: () => onTogglePurchased(item.id),
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: item.purchased ? Colors.green : Colors.transparent,
-                        border: Border.all(
-                          color: item.purchased ? Colors.green : (isDark ? AppColors.textTertiaryDark : Colors.grey[400]!),
-                          width: 2,
-                        ),
-                      ),
-                      child: item.purchased
-                          ? const Icon(
-                              Icons.check,
-                              size: 16,
-                              color: Colors.white,
-                            )
-                          : null,
-                    ),
-                  ),
-                  title: Text(
-                    item.name,
-                    style: TextStyle(
-                      decoration: item.purchased ? TextDecoration.lineThrough : null,
-                      color: item.purchased
-                          ? (isDark ? AppColors.textTertiaryDark : Colors.grey)
-                          : (isDark ? AppColors.textPrimaryDark : null),
-                    ),
-                  ),
-                  trailing: Text(
-                    item.quantityFormatted,
-                    style: TextStyle(
-                      color: item.purchased
-                          ? (isDark ? AppColors.textTertiaryDark : Colors.grey)
-                          : (isDark ? AppColors.textSecondaryDark : Colors.grey[600]),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  onTap: () => onTogglePurchased(item.id),
-                ),
+              return _ShoppingItemTile(
+                item: item,
+                isLast: isLast,
+                onTogglePurchased: onTogglePurchased,
+                showUsageDetails: true,
               );
             }).toList(),
           ),
@@ -939,6 +1174,146 @@ class _EmptyState extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 入库选择对话框（支持多选）
+class _AddToInventoryDialog extends StatefulWidget {
+  final List<ShoppingItemModel> purchasedItems;
+  final ShoppingListModel shoppingList;
+  final Function(List<ShoppingItemModel>) onConfirm;
+
+  const _AddToInventoryDialog({
+    required this.purchasedItems,
+    required this.shoppingList,
+    required this.onConfirm,
+  });
+
+  @override
+  State<_AddToInventoryDialog> createState() => _AddToInventoryDialogState();
+}
+
+class _AddToInventoryDialogState extends State<_AddToInventoryDialog> {
+  late Set<String> _selectedIds;
+
+  @override
+  void initState() {
+    super.initState();
+    // 默认全选
+    _selectedIds = widget.purchasedItems.map((item) => item.id).toSet();
+  }
+
+  void _toggleItem(String itemId) {
+    setState(() {
+      if (_selectedIds.contains(itemId)) {
+        _selectedIds.remove(itemId);
+      } else {
+        _selectedIds.add(itemId);
+      }
+    });
+  }
+
+  void _selectAll() {
+    setState(() {
+      _selectedIds = widget.purchasedItems.map((item) => item.id).toSet();
+    });
+  }
+
+  void _deselectAll() {
+    setState(() {
+      _selectedIds.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final selectedCount = _selectedIds.length;
+    final totalCount = widget.purchasedItems.length;
+    final isAllSelected = selectedCount == totalCount;
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Text('添加到家中库存'),
+          const Spacer(),
+          TextButton(
+            onPressed: isAllSelected ? _deselectAll : _selectAll,
+            child: Text(isAllSelected ? '取消全选' : '全选'),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '已选择 $selectedCount / $totalCount 项',
+              style: TextStyle(
+                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 300),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: widget.purchasedItems.length,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final item = widget.purchasedItems[index];
+                  final isSelected = _selectedIds.contains(item.id);
+
+                  return ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Checkbox(
+                      value: isSelected,
+                      onChanged: (_) => _toggleItem(item.id),
+                      activeColor: AppColors.primary,
+                    ),
+                    title: Text(
+                      item.name,
+                      style: TextStyle(
+                        color: isSelected
+                            ? (isDark ? AppColors.textPrimaryDark : null)
+                            : (isDark ? AppColors.textTertiaryDark : Colors.grey),
+                      ),
+                    ),
+                    trailing: Text(
+                      item.quantityFormatted,
+                      style: TextStyle(
+                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
+                      ),
+                    ),
+                    onTap: () => _toggleItem(item.id),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        ElevatedButton(
+          onPressed: selectedCount > 0
+              ? () {
+                  final selectedItems = widget.purchasedItems
+                      .where((item) => _selectedIds.contains(item.id))
+                      .toList();
+                  widget.onConfirm(selectedItems);
+                }
+              : null,
+          child: Text('入库 ($selectedCount)'),
+        ),
+      ],
     );
   }
 }

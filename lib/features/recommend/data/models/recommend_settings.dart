@@ -24,7 +24,10 @@ class RecommendSettings {
   /// 避免重复的天数 (3, 5, 7, 14, 30)
   final int avoidRecentDays;
 
-  const RecommendSettings({
+  /// v1.2: 菜单开始日期（默认为今天）
+  final DateTime startDate;
+
+  RecommendSettings({
     this.days = 1,
     this.breakfast = true,
     this.lunch = true,
@@ -33,7 +36,8 @@ class RecommendSettings {
     this.dishesPerMeal = 2,
     this.moodInput,
     this.avoidRecentDays = 7,
-  });
+    DateTime? startDate,
+  }) : startDate = startDate ?? DateTime.now();
 
   /// 根据家庭人数获取默认菜品数
   static int getDefaultDishesPerMeal(int familyMemberCount) {
@@ -44,9 +48,10 @@ class RecommendSettings {
   }
 
   /// 创建带有默认菜品数的设置
-  factory RecommendSettings.withFamilySize(int familyMemberCount) {
+  factory RecommendSettings.withFamilySize(int familyMemberCount, {DateTime? startDate}) {
     return RecommendSettings(
       dishesPerMeal: getDefaultDishesPerMeal(familyMemberCount),
+      startDate: startDate,
     );
   }
 
@@ -95,6 +100,7 @@ class RecommendSettings {
     String? moodInput,
     int? avoidRecentDays,
     bool clearMoodInput = false,
+    DateTime? startDate,
   }) {
     return RecommendSettings(
       days: days ?? this.days,
@@ -105,6 +111,7 @@ class RecommendSettings {
       dishesPerMeal: dishesPerMeal ?? this.dishesPerMeal,
       moodInput: clearMoodInput ? null : (moodInput ?? this.moodInput),
       avoidRecentDays: avoidRecentDays ?? this.avoidRecentDays,
+      startDate: startDate ?? this.startDate,
     );
   }
 
@@ -126,7 +133,10 @@ class RecommendSettings {
         other.snacks == snacks &&
         other.dishesPerMeal == dishesPerMeal &&
         other.moodInput == moodInput &&
-        other.avoidRecentDays == avoidRecentDays;
+        other.avoidRecentDays == avoidRecentDays &&
+        other.startDate.year == startDate.year &&
+        other.startDate.month == startDate.month &&
+        other.startDate.day == startDate.day;
   }
 
   @override
@@ -140,6 +150,9 @@ class RecommendSettings {
       dishesPerMeal,
       moodInput,
       avoidRecentDays,
+      startDate.year,
+      startDate.month,
+      startDate.day,
     );
   }
 }

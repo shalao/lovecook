@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
+import '../../features/family/data/models/dietary_options.dart';
 import '../../features/family/data/models/family_model.dart';
 import '../../features/inventory/data/models/ingredient_model.dart';
 import '../../features/recipe/data/models/recipe_model.dart';
@@ -273,7 +274,15 @@ class AIService {
 8. 每餐生成指定数量的菜品
 9. 避免推荐近期吃过的菜品
 10. 参考用户的历史评价偏好
-11. 多天菜单要保证菜品多样性，不重复'''
+11. 多天菜单要保证菜品多样性，不重复
+12. 【健身目标】如有成员设置健身目标，严格按建议的营养配比设计菜单：
+    - 减脂期：高蛋白低碳水，增加蔬菜，控制总热量
+    - 增肌期：高蛋白高碳水，保证热量盈余
+13. 【孕期营养】如有成员处于孕期/备孕/哺乳期：
+    - 备孕期：富含叶酸、铁、锌的食材
+    - 孕早期：清淡易消化，避免生冷
+    - 孕中晚期：补钙、补铁、DHA
+    - 哺乳期：催乳食材，高钙高蛋白'''
           },
           {
             'role': 'user',
@@ -671,6 +680,25 @@ ${healthRestrictions.isNotEmpty ? '健康限制：${healthRestrictions.toSet().j
       }
       if (member.dislikes.isNotEmpty) {
         buffer.write('，忌口：${member.dislikes.join("、")}');
+      }
+      // v1.2: 健身目标
+      if (member.fitnessGoal != null) {
+        buffer.write('，健身目标：${member.fitnessGoal}');
+        final ratios = fitnessNutritionRatios[member.fitnessGoal];
+        if (ratios != null) {
+          final protein = ((ratios['proteinRatio'] as double) * 100).toInt();
+          final carb = ((ratios['carbRatio'] as double) * 100).toInt();
+          final fat = ((ratios['fatRatio'] as double) * 100).toInt();
+          buffer.write('（建议配比：蛋白$protein%/碳水$carb%/脂肪$fat%）');
+        }
+      }
+      // v1.2: 孕期阶段
+      if (member.pregnancyStage != null) {
+        buffer.write('，孕期：${member.pregnancyStage}');
+        final focus = pregnancyNutritionFocus[member.pregnancyStage];
+        if (focus != null && focus.isNotEmpty) {
+          buffer.write('（重点补充：${focus.join("、")}）');
+        }
       }
       // 备注信息（包含具体疾病或特殊说明）
       if (member.notes != null && member.notes!.isNotEmpty) {

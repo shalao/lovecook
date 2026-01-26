@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../../core/services/ai_service.dart';
@@ -313,8 +314,13 @@ class MenuGenerateNotifier extends StateNotifier<MenuGenerateState> {
         newRecipeId: newRecipe.id,
         newRecipeName: newRecipe.name,
       );
-    } on AIServiceException {
-      // 生成失败，静默处理
+
+      // v1.2: 同步购物清单
+      await _syncShoppingList(family.id);
+    } on AIServiceException catch (e) {
+      // 生成失败，向上抛出异常让 UI 处理
+      debugPrint('替换菜品失败: ${e.message}');
+      rethrow;
     }
   }
 
@@ -333,6 +339,9 @@ class MenuGenerateNotifier extends StateNotifier<MenuGenerateState> {
       mealType: mealType,
       recipeIndex: recipeIndex,
     );
+
+    // v1.2: 同步购物清单
+    await _syncShoppingList(family.id);
   }
 
   /// 删除指定日期的餐次
@@ -347,6 +356,36 @@ class MenuGenerateNotifier extends StateNotifier<MenuGenerateState> {
       familyId: family.id,
       date: date,
       mealTypes: mealTypes,
+    );
+
+    // v1.2: 同步购物清单
+    await _syncShoppingList(family.id);
+  }
+
+  /// v1.2: 同步购物清单（当菜品变化时调用）
+  Future<void> _syncShoppingList(String familyId) async {
+    // 获取当前菜单
+    final plan = _repository.getCurrentMealPlan(familyId);
+    if (plan == null || plan.shoppingListId == null) return;
+
+    // 收集所有菜谱
+    final recipes = <RecipeModel>[];
+    for (final day in plan.days) {
+      for (final meal in day.meals) {
+        for (final recipeId in meal.recipeIds) {
+          final recipe = _recipeRepository.getRecipeById(recipeId);
+          if (recipe != null) {
+            recipes.add(recipe);
+          }
+        }
+      }
+    }
+
+    // 更新购物清单
+    await _shoppingListRepository.updateShoppingListItems(
+      shoppingListId: plan.shoppingListId!,
+      recipes: recipes,
+      inventory: _inventory,
     );
   }
 

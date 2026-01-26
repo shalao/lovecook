@@ -81,28 +81,545 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('今天吃什么'),
+        title: Text(state.isConfirmedMode ? '今日菜单' : '今天吃什么'),
         actions: [
-          if (state.hasAnyRecommendation)
+          // 已确认模式：显示生成更多按钮
+          if (state.isConfirmedMode)
             IconButton(
-              icon: Icon(_showSettings ? Icons.expand_less : Icons.settings),
-              onPressed: () => setState(() => _showSettings = !_showSettings),
-              tooltip: _showSettings ? '收起设置' : '显示设置',
+              icon: const Icon(Icons.add),
+              onPressed: () {
+                ref.read(recommendProvider.notifier).switchToGenerateMode();
+              },
+              tooltip: '生成更多',
             ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: state.isAnyLoading
-                ? null
-                : () => ref.read(recommendProvider.notifier).generateTodayRecommendations(),
-            tooltip: '重新生成',
-          ),
+          // 生成模式：显示设置和刷新按钮
+          if (!state.isConfirmedMode) ...[
+            if (state.hasAnyRecommendation)
+              IconButton(
+                icon: Icon(_showSettings ? Icons.expand_less : Icons.settings),
+                onPressed: () => setState(() => _showSettings = !_showSettings),
+                tooltip: _showSettings ? '收起设置' : '显示设置',
+              ),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: state.isAnyLoading
+                  ? null
+                  : () => ref.read(recommendProvider.notifier).generateTodayRecommendations(),
+              tooltip: '重新生成',
+            ),
+          ],
+          // 已确认模式：显示返回已确认菜单的按钮（如果有有效菜单且当前在生成模式）
+          if (!state.isConfirmedMode && state.hasValidConfirmedPlan)
+            IconButton(
+              icon: const Icon(Icons.calendar_today),
+              onPressed: () {
+                ref.read(recommendProvider.notifier).switchToConfirmedMode();
+              },
+              tooltip: '返回菜单',
+            ),
         ],
       ),
-      body: _buildBody(state),
+      body: state.isConfirmedMode
+          ? _buildConfirmedView(state)
+          : _buildGenerateView(state),
     );
   }
 
-  Widget _buildBody(RecommendState state) {
+  /// 已确认菜单视图
+  Widget _buildConfirmedView(RecommendState state) {
+    final selectedDayPlan = state.selectedDayPlan;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      children: [
+        // 日期导航
+        _buildDateNavigator(state),
+
+        // 菜单内容
+        Expanded(
+          child: selectedDayPlan == null
+              ? _buildNoMenuPlaceholder()
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 日期标题
+                      _buildConfirmedDateHeader(selectedDayPlan),
+                      const SizedBox(height: 16),
+
+                      // 各餐次
+                      if (selectedDayPlan.breakfast.recipes.isNotEmpty)
+                        _buildConfirmedMealSection(
+                          selectedDayPlan.breakfast,
+                          state.currentMealType == 'breakfast',
+                        ),
+                      if (selectedDayPlan.lunch.recipes.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _buildConfirmedMealSection(
+                          selectedDayPlan.lunch,
+                          state.currentMealType == 'lunch',
+                        ),
+                      ],
+                      if (selectedDayPlan.dinner.recipes.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _buildConfirmedMealSection(
+                          selectedDayPlan.dinner,
+                          state.currentMealType == 'dinner',
+                        ),
+                      ],
+                      if (selectedDayPlan.snacks.recipes.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _buildConfirmedMealSection(
+                          selectedDayPlan.snacks,
+                          state.currentMealType == 'snacks',
+                        ),
+                      ],
+
+                      // 如果当天没有任何菜品
+                      if (!selectedDayPlan.hasAnyRecipes)
+                        _buildEmptyDayPlaceholder(),
+
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+        ),
+
+        // 底部操作栏
+        _buildConfirmedBottomBar(state),
+      ],
+    );
+  }
+
+  /// 日期导航器
+  Widget _buildDateNavigator(RecommendState state) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // 获取有效的日期范围
+    final dayPlans = state.confirmedDayPlans;
+    if (dayPlans.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      height: 52,
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : Colors.grey[50],
+        border: Border(
+          bottom: BorderSide(
+            color: isDark ? AppColors.borderDark : Colors.grey[200]!,
+          ),
+        ),
+      ),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        itemCount: dayPlans.length,
+        itemBuilder: (context, index) {
+          final dayPlan = dayPlans[index];
+          final isSelected = state.selectedDate.year == dayPlan.date.year &&
+              state.selectedDate.month == dayPlan.date.month &&
+              state.selectedDate.day == dayPlan.date.day;
+          final isToday = dayPlan.date.year == today.year &&
+              dayPlan.date.month == today.month &&
+              dayPlan.date.day == today.day;
+
+          return GestureDetector(
+            onTap: () {
+              ref.read(recommendProvider.notifier).selectDate(dayPlan.date);
+            },
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Theme.of(context).primaryColor
+                    : (isDark ? AppColors.inputBackgroundDark : Colors.white),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isSelected
+                      ? Theme.of(context).primaryColor
+                      : (isDark ? AppColors.borderDark : Colors.grey[300]!),
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    dayPlan.dayLabel,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
+                      color: isSelected
+                          ? Colors.white
+                          : (isDark ? AppColors.textPrimaryDark : Colors.black87),
+                    ),
+                  ),
+                  Text(
+                    '${dayPlan.date.month}/${dayPlan.date.day}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      height: 1.2,
+                      color: isSelected
+                          ? Colors.white70
+                          : (isDark ? AppColors.textSecondaryDark : Colors.grey[600]),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// 已确认模式的日期标题
+  Widget _buildConfirmedDateHeader(DayPlan dayPlan) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Theme.of(context).primaryColor,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Text(
+            dayPlan.dayLabel,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          dayPlan.dateLabel,
+          style: TextStyle(
+            fontSize: 16,
+            color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 已确认模式的餐次区块
+  Widget _buildConfirmedMealSection(MealRecommend meal, bool isCurrentMeal) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isCurrentMeal
+            ? Theme.of(context).primaryColor.withOpacity(0.05)
+            : (isDark ? AppColors.surfaceDark : Colors.white),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isCurrentMeal
+              ? Theme.of(context).primaryColor
+              : (isDark ? AppColors.borderDark : Colors.grey[200]!),
+          width: isCurrentMeal ? 2 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 餐次标题
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                _getMealIcon(meal.type),
+                const SizedBox(width: 8),
+                Text(
+                  meal.typeName,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? AppColors.textPrimaryDark : Colors.black87,
+                  ),
+                ),
+                if (isCurrentMeal) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).primaryColor,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text(
+                      '当前',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          // 菜品列表
+          ...meal.recipes.asMap().entries.map((entry) {
+            final index = entry.key;
+            final recipe = entry.value;
+            return _buildConfirmedRecipeItem(recipe, isCurrentMeal, index == meal.recipes.length - 1);
+          }),
+        ],
+      ),
+    );
+  }
+
+  /// 已确认模式的菜品项
+  Widget _buildConfirmedRecipeItem(RecipeModel recipe, bool isCurrentMeal, bool isLast) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final notifier = ref.read(recommendProvider.notifier);
+    final hasAllIngredients = notifier.hasAllIngredients(recipe);
+    final missingIngredients = notifier.getMissingIngredients(recipe);
+    final totalTime = recipe.prepTime + recipe.cookTime;
+
+    return Container(
+      decoration: BoxDecoration(
+        border: isLast
+            ? null
+            : Border(
+                bottom: BorderSide(
+                  color: isDark ? AppColors.borderDark : Colors.grey[100]!,
+                ),
+              ),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        leading: Container(
+          width: 4,
+          height: 40,
+          decoration: BoxDecoration(
+            color: _getColorForRecipe(recipe),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        title: Text(
+          recipe.name,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: isDark ? AppColors.textPrimaryDark : Colors.black87,
+          ),
+        ),
+        subtitle: Wrap(
+          spacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.schedule,
+                  size: 12,
+                  color: isDark ? AppColors.textTertiaryDark : Colors.grey[500],
+                ),
+                const SizedBox(width: 2),
+                Text(
+                  '$totalTime分钟',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+            if (hasAllIngredients)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle, size: 12, color: Colors.green[600]),
+                  const SizedBox(width: 2),
+                  Text(
+                    '食材齐全',
+                    style: TextStyle(fontSize: 12, color: Colors.green[600]),
+                  ),
+                ],
+              )
+            else
+              Text(
+                '缺${missingIngredients.length}样',
+                style: TextStyle(fontSize: 12, color: Colors.orange[600]),
+              ),
+          ],
+        ),
+        trailing: isCurrentMeal
+            ? ElevatedButton(
+                onPressed: () {
+                  context.push('${AppRoutes.recipes}/${recipe.id}');
+                },
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  minimumSize: const Size(0, 32),
+                ),
+                child: const Text('开始做'),
+              )
+            : IconButton(
+                icon: Icon(
+                  Icons.chevron_right,
+                  color: isDark ? AppColors.textTertiaryDark : Colors.grey[400],
+                ),
+                onPressed: () {
+                  context.push('${AppRoutes.recipes}/${recipe.id}');
+                },
+              ),
+        onTap: () {
+          context.push('${AppRoutes.recipes}/${recipe.id}');
+        },
+      ),
+    );
+  }
+
+  /// 已确认模式底部操作栏
+  Widget _buildConfirmedBottomBar(RecommendState state) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : Colors.white,
+        border: Border(
+          top: BorderSide(
+            color: isDark ? AppColors.borderDark : Colors.grey[200]!,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () {
+                context.push(AppRoutes.menu);
+              },
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('调整菜单'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                // 生成购物清单
+                final shoppingListId = await ref
+                    .read(recommendProvider.notifier)
+                    .generateShoppingListFromConfirmedMenu();
+
+                if (!mounted) return;
+
+                if (shoppingListId != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('已生成购物清单'),
+                      backgroundColor: Colors.green,
+                      behavior: SnackBarBehavior.floating,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+
+                // 跳转到购物清单页面
+                context.push(AppRoutes.shopping);
+              },
+              icon: const Icon(Icons.shopping_cart_outlined, size: 18),
+              label: const Text('生成清单'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () {
+                ref.read(recommendProvider.notifier).switchToGenerateMode();
+              },
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('生成更多'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 无菜单占位符
+  Widget _buildNoMenuPlaceholder() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.restaurant_menu,
+            size: 64,
+            color: isDark ? AppColors.textTertiaryDark : Colors.grey[300],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '暂无菜单',
+            style: TextStyle(
+              fontSize: 18,
+              color: isDark ? AppColors.textSecondaryDark : Colors.grey[500],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '点击下方按钮生成今日菜单',
+            style: TextStyle(
+              fontSize: 14,
+              color: isDark ? AppColors.textTertiaryDark : Colors.grey[400],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 空日期占位符
+  Widget _buildEmptyDayPlaceholder() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.inputBackgroundDark : Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Center(
+        child: Text(
+          '该天暂无菜单安排',
+          style: TextStyle(
+            color: isDark ? AppColors.textTertiaryDark : Colors.grey[500],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 根据菜谱名生成颜色
+  Color _getColorForRecipe(RecipeModel recipe) {
+    final hash = recipe.name.hashCode;
+    final colors = [
+      const Color(0xFF4CAF50),
+      const Color(0xFF2196F3),
+      const Color(0xFFFF9800),
+      const Color(0xFF9C27B0),
+      const Color(0xFFE91E63),
+      const Color(0xFF00BCD4),
+      const Color(0xFFFF5722),
+      const Color(0xFF607D8B),
+    ];
+    return colors[hash.abs() % colors.length];
+  }
+
+  /// 生成推荐视图（原有逻辑）
+  Widget _buildGenerateView(RecommendState state) {
     if (state.isInitialLoading) {
       return const Center(
         child: Column(
@@ -254,6 +771,12 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
           _buildDaysSelector(settings),
           const SizedBox(height: 16),
 
+          // v1.2: 开始日期选择
+          _buildSectionTitle('🗓️ 开始日期'),
+          const SizedBox(height: 8),
+          _buildStartDateSelector(settings),
+          const SizedBox(height: 16),
+
           // 餐次选择
           _buildSectionTitle('🍽️ 餐次'),
           const SizedBox(height: 8),
@@ -324,6 +847,93 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
           visualDensity: VisualDensity.comfortable,
         );
       }).toList(),
+    );
+  }
+
+  /// v1.2: 开始日期选择器
+  Widget _buildStartDateSelector(RecommendSettings settings) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final startDate = DateTime(
+      settings.startDate.year,
+      settings.startDate.month,
+      settings.startDate.day,
+    );
+
+    // 判断日期标签
+    String dateLabel;
+    if (startDate.isAtSameMomentAs(today)) {
+      dateLabel = '今天';
+    } else if (startDate.isAtSameMomentAs(today.add(const Duration(days: 1)))) {
+      dateLabel = '明天';
+    } else if (startDate.isAtSameMomentAs(today.add(const Duration(days: 2)))) {
+      dateLabel = '后天';
+    } else {
+      dateLabel = '${startDate.month}月${startDate.day}日';
+    }
+
+    return GestureDetector(
+      onTap: () async {
+        final date = await showDatePicker(
+          context: context,
+          initialDate: settings.startDate,
+          firstDate: today,
+          lastDate: today.add(const Duration(days: 30)),
+          helpText: '选择菜单开始日期',
+          cancelText: '取消',
+          confirmText: '确定',
+        );
+        if (date != null) {
+          ref.read(recommendProvider.notifier).updateStartDate(date);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.inputBackgroundDark : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDark ? AppColors.borderDark : Colors.grey[300]!,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.calendar_today,
+              size: 20,
+              color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    dateLabel,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? AppColors.textPrimaryDark : Colors.black87,
+                    ),
+                  ),
+                  Text(
+                    '${startDate.year}年${startDate.month}月${startDate.day}日',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? AppColors.textTertiaryDark : Colors.grey[500],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              color: isDark ? AppColors.textTertiaryDark : Colors.grey[400],
+            ),
+          ],
+        ),
+      ),
     );
   }
 

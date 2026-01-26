@@ -5,7 +5,7 @@ void main() {
   group('RecommendSettings', () {
     group('默认值', () {
       test('默认值正确', () {
-        const settings = RecommendSettings();
+        final settings = RecommendSettings();
 
         expect(settings.days, 1);
         expect(settings.breakfast, true);
@@ -62,13 +62,13 @@ void main() {
 
     group('selectedMealTypes', () {
       test('默认返回早餐、午餐、晚餐', () {
-        const settings = RecommendSettings();
+        final settings = RecommendSettings();
 
         expect(settings.selectedMealTypes, ['早餐', '午餐', '晚餐']);
       });
 
       test('只选择早餐', () {
-        const settings = RecommendSettings(
+        final settings = RecommendSettings(
           breakfast: true,
           lunch: false,
           dinner: false,
@@ -79,7 +79,7 @@ void main() {
       });
 
       test('只选择午餐和晚餐', () {
-        const settings = RecommendSettings(
+        final settings = RecommendSettings(
           breakfast: false,
           lunch: true,
           dinner: true,
@@ -90,7 +90,7 @@ void main() {
       });
 
       test('全部选中', () {
-        const settings = RecommendSettings(
+        final settings = RecommendSettings(
           breakfast: true,
           lunch: true,
           dinner: true,
@@ -101,7 +101,7 @@ void main() {
       });
 
       test('全部不选中返回空列表', () {
-        const settings = RecommendSettings(
+        final settings = RecommendSettings(
           breakfast: false,
           lunch: false,
           dinner: false,
@@ -114,13 +114,13 @@ void main() {
 
     group('hasSelectedMealType', () {
       test('默认有选中餐次', () {
-        const settings = RecommendSettings();
+        final settings = RecommendSettings();
 
         expect(settings.hasSelectedMealType, true);
       });
 
       test('只选择一个餐次返回true', () {
-        const settings = RecommendSettings(
+        final settings = RecommendSettings(
           breakfast: false,
           lunch: false,
           dinner: false,
@@ -131,7 +131,7 @@ void main() {
       });
 
       test('全部不选中返回false', () {
-        const settings = RecommendSettings(
+        final settings = RecommendSettings(
           breakfast: false,
           lunch: false,
           dinner: false,
@@ -165,7 +165,7 @@ void main() {
 
     group('copyWith', () {
       test('修改单个属性', () {
-        const original = RecommendSettings();
+        final original = RecommendSettings();
         final copied = original.copyWith(days: 3);
 
         expect(copied.days, 3);
@@ -175,7 +175,7 @@ void main() {
       });
 
       test('修改多个属性', () {
-        const original = RecommendSettings();
+        final original = RecommendSettings();
         final copied = original.copyWith(
           days: 7,
           breakfast: false,
@@ -193,14 +193,14 @@ void main() {
       });
 
       test('clearMoodInput 清除心情输入', () {
-        const original = RecommendSettings(moodInput: '想吃清淡的');
+        final original = RecommendSettings(moodInput: '想吃清淡的');
         final copied = original.copyWith(clearMoodInput: true);
 
         expect(copied.moodInput, null);
       });
 
       test('clearMoodInput 优先于 moodInput', () {
-        const original = RecommendSettings(moodInput: '原始');
+        final original = RecommendSettings(moodInput: '原始');
         final copied = original.copyWith(
           moodInput: '新的',
           clearMoodInput: true,
@@ -210,7 +210,7 @@ void main() {
       });
 
       test('不传参数返回相同值的新实例', () {
-        const original = RecommendSettings(
+        final original = RecommendSettings(
           days: 3,
           breakfast: false,
           moodInput: '测试',
@@ -224,7 +224,7 @@ void main() {
 
     group('toString', () {
       test('返回可读字符串', () {
-        const settings = RecommendSettings(
+        final settings = RecommendSettings(
           days: 3,
           breakfast: true,
           lunch: true,
@@ -247,28 +247,28 @@ void main() {
 
     group('equality', () {
       test('相同属性的实例相等', () {
-        const settings1 = RecommendSettings(days: 3, breakfast: true);
-        const settings2 = RecommendSettings(days: 3, breakfast: true);
+        final settings1 = RecommendSettings(days: 3, breakfast: true);
+        final settings2 = RecommendSettings(days: 3, breakfast: true);
 
         expect(settings1, equals(settings2));
         expect(settings1.hashCode, equals(settings2.hashCode));
       });
 
       test('不同属性的实例不相等', () {
-        const settings1 = RecommendSettings(days: 3);
-        const settings2 = RecommendSettings(days: 5);
+        final settings1 = RecommendSettings(days: 3);
+        final settings2 = RecommendSettings(days: 5);
 
         expect(settings1, isNot(equals(settings2)));
       });
 
       test('与自身相等', () {
-        const settings = RecommendSettings();
+        final settings = RecommendSettings();
 
         expect(settings, equals(settings));
       });
 
       test('与其他类型不相等', () {
-        const settings = RecommendSettings();
+        final settings = RecommendSettings();
 
         expect(settings == 'string', false);
         expect(settings == 123, false);
@@ -278,13 +278,13 @@ void main() {
 
     group('边界情况', () {
       test('moodInput 可以是空字符串', () {
-        const settings = RecommendSettings(moodInput: '');
+        final settings = RecommendSettings(moodInput: '');
 
         expect(settings.moodInput, '');
       });
 
       test('moodInput 可以包含特殊字符', () {
-        const settings = RecommendSettings(moodInput: '想吃🌶️辣的！@#\$%');
+        final settings = RecommendSettings(moodInput: '想吃🌶️辣的！@#\$%');
 
         expect(settings.moodInput, '想吃🌶️辣的！@#\$%');
       });

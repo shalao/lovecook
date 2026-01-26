@@ -8,6 +8,7 @@ import '../../../family/data/repositories/family_repository.dart';
 import '../../../history/presentation/providers/history_provider.dart';
 import '../../../inventory/data/models/ingredient_model.dart';
 import '../../../inventory/presentation/providers/inventory_provider.dart';
+import '../../../menu/data/repositories/meal_plan_repository.dart';
 import '../../data/models/recipe_model.dart';
 import '../../data/repositories/recipe_repository.dart';
 
@@ -77,6 +78,14 @@ class RecipeDetailScreen extends ConsumerWidget {
               ),
             ),
             actions: [
+              // v1.2: 添加到菜单
+              IconButton(
+                icon: const Icon(Icons.add_chart),
+                tooltip: '添加到菜单',
+                onPressed: () {
+                  _showAddToMenuDialog(context, ref, recipe);
+                },
+              ),
               // 进入烹饪模式
               IconButton(
                 icon: const Icon(Icons.play_circle_outline),
@@ -618,6 +627,308 @@ class RecipeDetailScreen extends ConsumerWidget {
         parentRef: ref,
       ),
     );
+  }
+
+  /// v1.2: 显示添加到菜单对话框
+  void _showAddToMenuDialog(
+    BuildContext context,
+    WidgetRef ref,
+    RecipeModel recipe,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _AddToMenuSheet(
+        recipe: recipe,
+        parentRef: ref,
+      ),
+    );
+  }
+}
+
+/// v1.2: 添加到菜单的底部弹窗
+class _AddToMenuSheet extends ConsumerStatefulWidget {
+  final RecipeModel recipe;
+  final WidgetRef parentRef;
+
+  const _AddToMenuSheet({
+    required this.recipe,
+    required this.parentRef,
+  });
+
+  @override
+  ConsumerState<_AddToMenuSheet> createState() => _AddToMenuSheetState();
+}
+
+class _AddToMenuSheetState extends ConsumerState<_AddToMenuSheet> {
+  late DateTime _selectedDate;
+  String _selectedMealType = 'lunch';
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDate = DateTime.now();
+    // 根据当前时间自动选择餐次
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 10) {
+      _selectedMealType = 'breakfast';
+    } else if (hour >= 10 && hour < 14) {
+      _selectedMealType = 'lunch';
+    } else {
+      _selectedMealType = 'dinner';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 顶部拖动条
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: isDark ? Colors.grey[600] : Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          // 标题
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.add_chart,
+                  color: Theme.of(context).primaryColor,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '添加到菜单',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? AppColors.textPrimaryDark : Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 菜谱名称
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              widget.recipe.name,
+              style: TextStyle(
+                fontSize: 16,
+                color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // 日期选择
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              '选择日期',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isDark ? AppColors.textPrimaryDark : Colors.black87,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildDateSelector(isDark),
+          const SizedBox(height: 16),
+          // 餐次选择
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              '选择餐次',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isDark ? AppColors.textPrimaryDark : Colors.black87,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildMealTypeSelector(isDark),
+          const SizedBox(height: 24),
+          // 确认按钮
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _addToMenu,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('添加'),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDateSelector(bool isDark) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final dates = List.generate(7, (i) => today.add(Duration(days: i)));
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
+        children: dates.map((date) {
+          final isSelected = date.year == _selectedDate.year &&
+              date.month == _selectedDate.month &&
+              date.day == _selectedDate.day;
+
+          String label;
+          final diff = date.difference(today).inDays;
+          if (diff == 0) {
+            label = '今天';
+          } else if (diff == 1) {
+            label = '明天';
+          } else if (diff == 2) {
+            label = '后天';
+          } else {
+            label = '${date.month}/${date.day}';
+          }
+
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: ChoiceChip(
+              label: Text(label),
+              selected: isSelected,
+              onSelected: (_) => setState(() => _selectedDate = date),
+              backgroundColor: isDark ? AppColors.inputBackgroundDark : Colors.grey[100],
+              selectedColor: Theme.of(context).primaryColor,
+              labelStyle: TextStyle(
+                color: isSelected ? Colors.white : (isDark ? AppColors.textPrimaryDark : Colors.black87),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildMealTypeSelector(bool isDark) {
+    final mealTypes = [
+      ('breakfast', '早餐', '🌅'),
+      ('lunch', '午餐', '☀️'),
+      ('dinner', '晚餐', '🌙'),
+      ('snack', '加餐', '🍪'),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Wrap(
+        spacing: 8,
+        children: mealTypes.map((meal) {
+          final isSelected = _selectedMealType == meal.$1;
+          return ChoiceChip(
+            label: Text('${meal.$3} ${meal.$2}'),
+            selected: isSelected,
+            onSelected: (_) => setState(() => _selectedMealType = meal.$1),
+            backgroundColor: isDark ? AppColors.inputBackgroundDark : Colors.grey[100],
+            selectedColor: Theme.of(context).primaryColor,
+            labelStyle: TextStyle(
+              color: isSelected ? Colors.white : (isDark ? AppColors.textPrimaryDark : Colors.black87),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Future<void> _addToMenu() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final currentFamily = ref.read(currentFamilyProvider);
+      if (currentFamily == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('请先创建家庭')),
+          );
+        }
+        return;
+      }
+
+      // 添加到菜单
+      final mealPlanRepository = ref.read(mealPlanRepositoryProvider);
+      await mealPlanRepository.addRecipeToDate(
+        familyId: currentFamily.id,
+        date: _selectedDate,
+        mealType: _selectedMealType,
+        recipe: widget.recipe,
+      );
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('已添加到${_getMealTypeName(_selectedMealType)}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('添加失败: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  String _getMealTypeName(String type) {
+    switch (type) {
+      case 'breakfast':
+        return '早餐';
+      case 'lunch':
+        return '午餐';
+      case 'dinner':
+        return '晚餐';
+      case 'snack':
+        return '加餐';
+      default:
+        return type;
+    }
   }
 }
 

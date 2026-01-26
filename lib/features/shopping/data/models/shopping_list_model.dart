@@ -64,6 +64,58 @@ class ShoppingListModel extends HiveObject {
     return grouped;
   }
 
+  /// 按紧急度分组
+  /// 返回 Map: 'urgent' -> 今天需要买, 'soon' -> 3天内需要买, 'later' -> 可以晚点买
+  Map<String, List<ShoppingItemModel>> get groupedByUrgency {
+    final grouped = <String, List<ShoppingItemModel>>{
+      'urgent': [],
+      'soon': [],
+      'later': [],
+    };
+    for (final item in items) {
+      final level = item.getUrgencyLevel();
+      grouped[level]!.add(item);
+    }
+    // 按需求日期排序
+    for (final list in grouped.values) {
+      list.sort((a, b) {
+        if (a.needByDate == null && b.needByDate == null) return 0;
+        if (a.needByDate == null) return 1;
+        if (b.needByDate == null) return -1;
+        return a.needByDate!.compareTo(b.needByDate!);
+      });
+    }
+    return grouped;
+  }
+
+  /// 获取紧急度标签
+  static String getUrgencyLabel(String level) {
+    switch (level) {
+      case 'urgent':
+        return '今天需要买';
+      case 'soon':
+        return '3天内需要买';
+      case 'later':
+        return '可以晚点买';
+      default:
+        return level;
+    }
+  }
+
+  /// 获取紧急度图标颜色 (返回颜色值 int)
+  static int getUrgencyColorValue(String level) {
+    switch (level) {
+      case 'urgent':
+        return 0xFFF44336; // Colors.red
+      case 'soon':
+        return 0xFFFF9800; // Colors.orange
+      case 'later':
+        return 0xFF4CAF50; // Colors.green
+      default:
+        return 0xFF9E9E9E; // Colors.grey
+    }
+  }
+
   /// 添加项目
   void addItem(ShoppingItemModel item) {
     // 检查是否已存在同名同单位的项目
@@ -133,6 +185,12 @@ class ShoppingItemModel {
   @HiveField(7)
   String? source; // menu/restock/manual
 
+  @HiveField(8)
+  DateTime? needByDate; // 最晚需要购买日期
+
+  @HiveField(9)
+  List<IngredientUsage>? usages; // 用量明细列表
+
   ShoppingItemModel({
     required this.id,
     this.category,
@@ -142,6 +200,8 @@ class ShoppingItemModel {
     this.notes,
     this.purchased = false,
     this.source,
+    this.needByDate,
+    this.usages,
   });
 
   factory ShoppingItemModel.create({
@@ -151,6 +211,8 @@ class ShoppingItemModel {
     required String unit,
     String? notes,
     String? source,
+    DateTime? needByDate,
+    List<IngredientUsage>? usages,
   }) {
     return ShoppingItemModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -161,6 +223,8 @@ class ShoppingItemModel {
       notes: notes,
       purchased: false,
       source: source ?? 'manual',
+      needByDate: needByDate,
+      usages: usages,
     );
   }
 
@@ -187,6 +251,8 @@ class ShoppingItemModel {
     String? notes,
     bool? purchased,
     String? source,
+    DateTime? needByDate,
+    List<IngredientUsage>? usages,
   }) {
     return ShoppingItemModel(
       id: id ?? this.id,
@@ -197,7 +263,29 @@ class ShoppingItemModel {
       notes: notes ?? this.notes,
       purchased: purchased ?? this.purchased,
       source: source ?? this.source,
+      needByDate: needByDate ?? this.needByDate,
+      usages: usages ?? this.usages,
     );
+  }
+
+  /// 添加用量记录
+  void addUsage(IngredientUsage usage) {
+    usages ??= [];
+    usages!.add(usage);
+  }
+
+  /// 获取紧急度分类
+  /// 返回: 'urgent' (今天), 'soon' (3天内), 'later' (可以晚点买)
+  String getUrgencyLevel() {
+    if (needByDate == null) return 'later';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final needDate = DateTime(needByDate!.year, needByDate!.month, needByDate!.day);
+    final daysUntilNeeded = needDate.difference(today).inDays;
+
+    if (daysUntilNeeded <= 0) return 'urgent';
+    if (daysUntilNeeded <= 3) return 'soon';
+    return 'later';
   }
 }
 
@@ -218,5 +306,64 @@ class ShoppingItemSource {
       default:
         return source;
     }
+  }
+}
+
+/// 食材用量明细 - 记录每个食材的使用来源
+@HiveType(typeId: 42)
+class IngredientUsage {
+  @HiveField(0)
+  String recipeName; // 菜名，如 "糖醋排骨"
+
+  @HiveField(1)
+  double quantity; // 用量，如 500
+
+  @HiveField(2)
+  String unit; // 单位，如 "g"
+
+  @HiveField(3)
+  DateTime useDate; // 使用日期
+
+  @HiveField(4)
+  String mealType; // 餐次，如 "午餐"
+
+  IngredientUsage({
+    required this.recipeName,
+    required this.quantity,
+    required this.unit,
+    required this.useDate,
+    required this.mealType,
+  });
+
+  /// 格式化数量显示
+  String get quantityFormatted {
+    final qty = quantity == quantity.toInt()
+        ? quantity.toInt().toString()
+        : quantity.toStringAsFixed(1);
+    return '$qty$unit';
+  }
+
+  /// 格式化日期显示
+  String get useDateFormatted {
+    return '${useDate.month}/${useDate.day}';
+  }
+
+  /// 获取餐次标签
+  String get mealTypeLabel {
+    switch (mealType.toLowerCase()) {
+      case 'breakfast':
+        return '早餐';
+      case 'lunch':
+        return '午餐';
+      case 'dinner':
+        return '晚餐';
+      default:
+        return mealType;
+    }
+  }
+
+  /// 完整描述，如 "糖醋排骨: 500g (1/29 午餐)"
+  String get fullDescription {
+    return '$recipeName: $quantityFormatted ($useDateFormatted $mealTypeLabel)';
   }
 }
