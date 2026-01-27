@@ -12,7 +12,24 @@ import '../../../menu/data/repositories/meal_plan_repository.dart';
 import '../../data/models/recipe_model.dart';
 import '../../data/repositories/recipe_repository.dart';
 
-class RecipeDetailScreen extends ConsumerWidget {
+/// 完成烹饪对话框返回的结果
+class _CompleteCookingResult {
+  final String recipeName;
+  final String mealType;
+  final int deductedCount;
+  final int notFoundCount;
+  final bool deductInventory;
+
+  _CompleteCookingResult({
+    required this.recipeName,
+    required this.mealType,
+    required this.deductedCount,
+    required this.notFoundCount,
+    required this.deductInventory,
+  });
+}
+
+class RecipeDetailScreen extends ConsumerStatefulWidget {
   final String recipeId;
 
   const RecipeDetailScreen({
@@ -21,8 +38,15 @@ class RecipeDetailScreen extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final recipe = ref.watch(recipeByIdProvider(recipeId));
+  ConsumerState<RecipeDetailScreen> createState() => _RecipeDetailScreenState();
+}
+
+class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
+  bool _isTogglingFavorite = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final recipe = ref.watch(recipeByIdProvider(widget.recipeId));
 
     if (recipe == null) {
       return Scaffold(
@@ -37,7 +61,7 @@ class RecipeDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showCompleteCookingDialog(context, ref, recipe),
+        onPressed: () => _showCompleteCookingDialog(context, recipe),
         icon: const Icon(Icons.check_circle_outline),
         label: const Text('已吃'),
         backgroundColor: Colors.green,
@@ -83,7 +107,7 @@ class RecipeDetailScreen extends ConsumerWidget {
                 icon: const Icon(Icons.add_chart),
                 tooltip: '添加到菜单',
                 onPressed: () {
-                  _showAddToMenuDialog(context, ref, recipe);
+                  _showAddToMenuDialog(context, recipe);
                 },
               ),
               // 进入烹饪模式
@@ -96,19 +120,43 @@ class RecipeDetailScreen extends ConsumerWidget {
               ),
               // 收藏
               IconButton(
-                icon: Icon(
-                  recipe.isFavorite ? Icons.bookmark : Icons.bookmark_border,
-                  color: recipe.isFavorite ? Colors.amber : null,
-                ),
-                onPressed: () async {
-                  final currentFamily = ref.read(currentFamilyProvider);
-                  // 等待收藏操作完成后再刷新
-                  await ref.read(recipeRepositoryProvider).toggleFavorite(recipeId);
-                  ref.invalidate(recipeByIdProvider(recipeId));
-                  ref.invalidate(allRecipesProvider);
-                  // 刷新收藏列表，确保收藏状态同步
-                  ref.invalidate(favoriteRecipesProvider(currentFamily?.id));
-                },
+                icon: _isTogglingFavorite
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        recipe.isFavorite ? Icons.bookmark : Icons.bookmark_border,
+                        color: recipe.isFavorite ? Colors.amber : null,
+                      ),
+                onPressed: _isTogglingFavorite
+                    ? null
+                    : () async {
+                        setState(() => _isTogglingFavorite = true);
+                        try {
+                          final currentFamily = ref.read(currentFamilyProvider);
+                          // 等待收藏操作完成后再刷新
+                          await ref.read(recipeRepositoryProvider).toggleFavorite(widget.recipeId);
+                          ref.invalidate(recipeByIdProvider(widget.recipeId));
+                          ref.invalidate(allRecipesProvider);
+                          // 刷新收藏列表，确保收藏状态同步
+                          ref.invalidate(favoriteRecipesProvider(currentFamily?.id));
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('收藏操作失败: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        } finally {
+                          if (mounted) {
+                            setState(() => _isTogglingFavorite = false);
+                          }
+                        }
+                      },
               ),
             ],
           ),
@@ -615,24 +663,77 @@ class RecipeDetailScreen extends ConsumerWidget {
     );
   }
 
-  void _showCompleteCookingDialog(
+  Future<void> _showCompleteCookingDialog(
     BuildContext context,
-    WidgetRef ref,
     RecipeModel recipe,
-  ) {
-    showDialog(
+  ) async {
+    final result = await showDialog<_CompleteCookingResult>(
       context: context,
       builder: (dialogContext) => _CompleteCookingDialog(
         recipe: recipe,
         parentRef: ref,
       ),
     );
+
+    if (result != null && context.mounted) {
+      // 在父级 context 中显示 SnackBar
+      String message = '已记录「${result.recipeName}」为${_getMealTypeName(result.mealType)}';
+      if (result.deductInventory) {
+        if (result.deductedCount > 0) {
+          message += '，已扣减 ${result.deductedCount} 项食材';
+        }
+        if (result.notFoundCount > 0) {
+          message += '，${result.notFoundCount} 项库存中未找到';
+        }
+      }
+
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          // 设置一个很长的 duration，由手动定时器控制关闭
+          // 嵌套 Scaffold 结构下内置定时器可能失效
+          duration: const Duration(days: 1),
+          action: SnackBarAction(
+            label: '查看日历',
+            textColor: Colors.white,
+            onPressed: () {
+              scaffoldMessenger.hideCurrentSnackBar();
+              context.push(AppRoutes.mealCalendar);
+            },
+          ),
+        ),
+      );
+
+      // 手动定时器：4秒后关闭 SnackBar
+      // 由于嵌套 Scaffold 结构，内置 duration 定时器不可靠
+      Future.delayed(const Duration(seconds: 4), () {
+        scaffoldMessenger.hideCurrentSnackBar();
+      });
+    }
+  }
+
+  String _getMealTypeName(String type) {
+    switch (type) {
+      case 'breakfast':
+        return '早餐';
+      case 'lunch':
+        return '午餐';
+      case 'dinner':
+        return '晚餐';
+      case 'snacks':
+        return '甜点';
+      default:
+        return type;
+    }
   }
 
   /// v1.2: 显示添加到菜单对话框
   void _showAddToMenuDialog(
     BuildContext context,
-    WidgetRef ref,
     RecipeModel recipe,
   ) {
     showModalBottomSheet(
@@ -1182,36 +1283,15 @@ class _CompleteCookingDialogState extends ConsumerState<_CompleteCookingDialog> 
       );
 
       if (mounted) {
-        // 在关闭对话框前获取引用，避免 context 失效
-        final scaffoldMessenger = ScaffoldMessenger.of(context);
-        final router = GoRouter.of(context);
-
-        Navigator.pop(context);
-
-        String message = '已记录「${widget.recipe.name}」为${_getMealTypeName(_selectedMealType)}';
-        if (_deductInventory) {
-          if (deductedCount > 0) {
-            message += '，已扣减 $deductedCount 项食材';
-          }
-          if (notFoundCount > 0) {
-            message += '，$notFoundCount 项库存中未找到';
-          }
-        }
-
-        scaffoldMessenger.showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 4),
-            action: SnackBarAction(
-              label: '查看日历',
-              textColor: Colors.white,
-              onPressed: () {
-                scaffoldMessenger.hideCurrentSnackBar();
-                router.push(AppRoutes.mealCalendar);
-              },
-            ),
+        // 返回结果给父级处理 SnackBar 显示
+        Navigator.pop(
+          context,
+          _CompleteCookingResult(
+            recipeName: widget.recipe.name,
+            mealType: _selectedMealType,
+            deductedCount: deductedCount,
+            notFoundCount: notFoundCount,
+            deductInventory: _deductInventory,
           ),
         );
       }
