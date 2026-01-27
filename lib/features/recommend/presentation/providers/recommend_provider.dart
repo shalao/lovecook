@@ -822,7 +822,19 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
 
   /// 保存当前推荐到菜单历史
   Future<bool> saveToHistory() async {
+    const page = 'RecommendProvider';
+    const action = '保存到历史';
+
+    logger.info(page, action, '开始保存', data: {
+      'hasFamily': _currentFamily != null,
+      'dayPlansCount': state.dayPlans.length,
+    });
+
     if (_currentFamily == null || state.dayPlans.isEmpty) {
+      logger.warning(page, action, '无法保存：缺少必要数据', data: {
+        'hasFamily': _currentFamily != null,
+        'dayPlansCount': state.dayPlans.length,
+      });
       return false;
     }
 
@@ -885,6 +897,11 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
       // 保存到 MealPlanRepository
       await _mealPlanRepository.saveMealPlan(plan);
 
+      logger.info(page, action, '菜单已保存到数据库', data: {
+        'planId': plan.id,
+        'daysCount': plan.days.length,
+      });
+
       // v1.2: 保存成功后自动切换到已确认模式
       state = state.copyWith(
         viewMode: RecommendViewMode.confirmed,
@@ -894,14 +911,20 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
         selectedDate: startDate, // 使用菜单的开始日期
       );
 
+      logger.info(page, action, '已切换到确认模式', data: {
+        'viewMode': state.viewMode.toString(),
+        'confirmedDayPlansCount': state.confirmedDayPlans.length,
+        'selectedDate': state.selectedDate.toString(),
+      });
+
       // 通知其他 Provider 刷新
       _ref.invalidate(mealPlanRepositoryProvider);
       _ref.invalidate(menuListProvider);
 
       return true;
-    } catch (e) {
+    } catch (e, stack) {
       // 保存失败，保持当前状态
-      debugPrint('保存菜单历史失败: $e');
+      logger.error(page, action, '保存菜单历史失败', error: e, stackTrace: stack);
       return false;
     }
   }
@@ -921,19 +944,30 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
       return null;
     }
 
-    if (state.confirmedDayPlans.isEmpty) {
-      logger.warning(page, action, '确认的日计划为空', data: {
+    // 优先使用 confirmedDayPlans，如果为空则回退到 dayPlans
+    final dayPlansToUse = state.confirmedDayPlans.isNotEmpty
+        ? state.confirmedDayPlans
+        : state.dayPlans;
+
+    if (dayPlansToUse.isEmpty) {
+      logger.warning(page, action, '没有可用的日计划', data: {
         'viewMode': state.viewMode.toString(),
         'confirmedPlanId': state.confirmedPlan?.id,
+        'confirmedDayPlansCount': state.confirmedDayPlans.length,
         'dayPlansCount': state.dayPlans.length,
       });
       return null;
     }
 
+    logger.info(page, action, '使用日计划生成购物清单', data: {
+      'source': state.confirmedDayPlans.isNotEmpty ? 'confirmedDayPlans' : 'dayPlans',
+      'count': dayPlansToUse.length,
+    });
+
     try {
       // 收集所有菜谱，并附带日期和餐次信息
       final recipesWithDates = <RecipeWithDateInfo>[];
-      for (final dayPlan in state.confirmedDayPlans) {
+      for (final dayPlan in dayPlansToUse) {
         // 早餐
         for (final recipe in dayPlan.breakfast.recipes) {
           recipesWithDates.add(RecipeWithDateInfo(

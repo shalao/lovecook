@@ -33,12 +33,26 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
     super.dispose();
   }
 
+  /// 自动保存到菜单历史
+  Future<void> _autoSaveToHistory() async {
+    logger.info('RecommendScreen', '自动保存', '开始自动保存到菜单历史');
+    final saveSuccess = await ref.read(recommendProvider.notifier).saveToHistory();
+    logger.info('RecommendScreen', '自动保存', '保存结果: $saveSuccess');
+    // 生成成功后收起设置面板
+    if (mounted) {
+      setState(() => _showSettings = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(recommendProvider);
 
     // 监听状态变化，显示成功/失败提示
     ref.listen<RecommendState>(recommendProvider, (previous, next) {
+      // 检查 widget 是否仍然挂载
+      if (!mounted) return;
+
       // 从加载中变为加载完成
       if (previous?.isInitialLoading == true && next.isInitialLoading == false) {
         if (next.globalError != null) {
@@ -72,10 +86,8 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
           );
           // 刷新全部菜谱列表，确保新生成的菜谱同步显示
           ref.invalidate(allRecipesProvider);
-          // 自动保存到菜单历史
-          ref.read(recommendProvider.notifier).saveToHistory();
-          // 生成成功后收起设置面板
-          setState(() => _showSettings = false);
+          // 自动保存到菜单历史（异步执行）
+          _autoSaveToHistory();
         }
       }
     });
