@@ -16,4 +16,5 @@ echo "按 Ctrl+C 停止应用"
 echo "-----------------------------------"
 
 # 运行 Flutter 并同时输出到终端和日志文件
-flutter run -d chrome 2>&1 | tee "$LOG_FILE"
+#flutter run -d chrome 2>&1 | tee "$LOG_FILE"
+NO_PROXY=localhost,127.0.0.1 flutter run -d chrome 2>&1 | tee "$LOG_FILE"
