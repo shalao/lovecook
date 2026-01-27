@@ -103,7 +103,7 @@ UI (Screens) → Providers (Riverpod StateNotifier) → Repositories → Hive St
 | 10 | Ingredient (IngredientModel) |
 | 20-22 | Recipe (RecipeModel, RecipeIngredientModel, NutritionInfoModel) |
 | 30-32 | MealPlan (MealPlanModel, DayPlanModel, MealModel) |
-| 40-41 | Shopping (ShoppingListModel, ShoppingItemModel) |
+| 40-42 | Shopping (ShoppingListModel, ShoppingItemModel, IngredientUsage) |
 | 50-51 | History (MealHistoryModel, MealHistoryRecipeModel) |
 
 ### 关键 Providers

@@ -306,9 +306,6 @@ class _ShoppingListTab extends ConsumerWidget {
         successCount++;
       }
 
-      // 刷新购物清单
-      ref.invalidate(familyShoppingListsProvider(familyId));
-
       if (context.mounted) {
         Navigator.pop(context); // 关闭加载对话框
         ScaffoldMessenger.of(context).showSnackBar(
@@ -318,6 +315,9 @@ class _ShoppingListTab extends ConsumerWidget {
           ),
         );
       }
+
+      // 刷新购物清单（必须在 Navigator.pop 之后，避免 Navigator locked 错误）
+      ref.invalidate(familyShoppingListsProvider(familyId));
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context); // 关闭加载对话框
@@ -329,6 +329,8 @@ class _ShoppingListTab extends ConsumerWidget {
           ),
         );
       }
+      // 即使失败也刷新，确保 UI 状态一致
+      ref.invalidate(familyShoppingListsProvider(familyId));
     }
   }
 

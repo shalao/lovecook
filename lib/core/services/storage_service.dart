@@ -84,12 +84,15 @@ class StorageService {
       Hive.registerAdapter(MealModelAdapter());
     }
 
-    // ShoppingList 相关
+    // ShoppingList 相关 (TypeId: 40-42)
     if (!Hive.isAdapterRegistered(40)) {
       Hive.registerAdapter(ShoppingListModelAdapter());
     }
     if (!Hive.isAdapterRegistered(41)) {
       Hive.registerAdapter(ShoppingItemModelAdapter());
+    }
+    if (!Hive.isAdapterRegistered(42)) {
+      Hive.registerAdapter(IngredientUsageAdapter());
     }
 
     // MealHistory 相关
