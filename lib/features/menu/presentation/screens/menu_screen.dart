@@ -8,6 +8,7 @@ import '../../../recipe/data/models/recipe_model.dart';
 import '../../../recipe/data/repositories/recipe_repository.dart';
 import '../../data/models/meal_plan_model.dart';
 import '../../data/repositories/meal_plan_repository.dart';
+import '../../../recommend/presentation/providers/recommend_provider.dart';
 import '../providers/menu_provider.dart';
 
 class MenuScreen extends ConsumerWidget {
@@ -250,6 +251,8 @@ class MenuScreen extends ConsumerWidget {
             onPressed: () {
               Navigator.pop(context);
               ref.read(menuListProvider.notifier).deletePlan(planId);
+              // 同步刷新推荐页数据
+              ref.invalidate(recommendProvider);
             },
             child: Text(
               '删除',
@@ -565,6 +568,8 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
                 mealTypes: [meal.type],
               );
               ref.read(menuListProvider.notifier).loadPlans();
+              // 同步刷新推荐页数据
+              ref.invalidate(recommendProvider);
               if (context.mounted) {
                 Navigator.pop(context); // 关闭详情弹窗
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -611,6 +616,8 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
                 recipeIndex: recipeIndex,
               );
               ref.read(menuListProvider.notifier).loadPlans();
+              // 同步刷新推荐页数据
+              ref.invalidate(recommendProvider);
               if (context.mounted) {
                 Navigator.pop(context); // 关闭详情弹窗
                 ScaffoldMessenger.of(context).showSnackBar(

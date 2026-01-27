@@ -283,7 +283,7 @@ class AIService {
 5. 菜谱要简洁实用，步骤精简（3-5步）
 6. 购物清单只包含库存不足的食材
 7. 使用自然、家常的语气描述
-8. 每餐生成指定数量的菜品
+8. 【重要】每餐必须严格生成指定数量的菜品，不能多也不能少
 9. 避免推荐近期吃过的菜品
 10. 参考用户的历史评价偏好
 11. 多天菜单要保证菜品多样性，不重复
@@ -294,7 +294,15 @@ class AIService {
     - 备孕期：富含叶酸、铁、锌的食材
     - 孕早期：清淡易消化，避免生冷
     - 孕中晚期：补钙、补铁、DHA
-    - 哺乳期：催乳食材，高钙高蛋白'''
+    - 哺乳期：催乳食材，高钙高蛋白
+14. 【单位规范】食材单位必须使用以下标准：
+    - 条状蔬菜（黄瓜、胡萝卜、茄子、玉米等）：用"根"
+    - 叶菜/把状（葱、香菜、韭菜等）：用"把"
+    - 圆形蔬果（土豆、洋葱、番茄、苹果、鸡蛋等）：用"个"
+    - 块状（豆腐、姜）：用"块"
+    - 重量：用"克"或"千克"
+    - 体积：用"毫升"或"升"
+    - 调味料少量：用"勺"或"适量"'''
           },
           {
             'role': 'user',
@@ -310,7 +318,7 @@ $inventoryInfo
 ${mealTypes.join('、')}
 
 【每餐菜品数量】
-$dishesPerMeal 道菜
+严格 $dishesPerMeal 道菜（每个餐次的recipes数组必须恰好包含 $dishesPerMeal 个菜谱，不能多也不能少！）
 ${moodInput != null && moodInput.isNotEmpty ? '''
 
 【今天的特别需求/心情】
@@ -347,7 +355,10 @@ $preferenceInfo
   "nutritionSummary": "营养总结（仅供参考）"
 }
 
-注意：days数组必须有 $days 个元素，每天必须包含所有选择的餐次！只返回JSON。''',
+注意：
+1. days数组必须有 $days 个元素，每天必须包含所有选择的餐次
+2. 【关键】每个餐次的recipes数组必须恰好有 $dishesPerMeal 个菜谱
+只返回JSON。''',
           },
         ],
       );
@@ -422,6 +433,13 @@ $familyInfo
   "nutrition": {"calories":200,"protein":15,"carbs":20,"fat":8}
 }
 
+【单位规范】
+- 条状蔬菜（黄瓜、胡萝卜、茄子）：用"根"
+- 叶菜/把状（葱、香菜、韭菜）：用"把"
+- 圆形蔬果（土豆、洋葱、番茄、鸡蛋）：用"个"
+- 块状（豆腐、姜）：用"块"
+- 重量：用"克"，体积：用"毫升"
+
 优先推荐能充分利用现有食材的菜谱。只返回JSON数组。''',
           },
         ],
@@ -490,6 +508,8 @@ $familyInfo
   "difficulty": "easy/medium/hard",
   "nutrition": {"calories":200,"protein":15,"carbs":20,"fat":8,"summary":"营养点评"}
 }
+
+【单位规范】条状蔬菜用"根"，叶菜用"把"，圆形蔬果用"个"，块状用"块"，重量用"克"。
 
 根据家庭成员健康状况调整配方。只返回JSON。''',
           },
@@ -651,8 +671,8 @@ $inventoryInfo
             'content': '''推荐一道$mealType菜品：
 
 ${healthRestrictions.isNotEmpty ? '健康限制：${healthRestrictions.toSet().join("、")}\n' : ''}${allergies.isNotEmpty ? '过敏源：${allergies.toSet().join("、")}\n' : ''}${inventoryNames.isNotEmpty ? '可用食材：$inventoryNames\n' : ''}${excludeRecipes.isNotEmpty ? '排除：${excludeRecipes.join("、")}\n' : ''}${preference != null ? '偏好：$preference\n' : ''}
-返回JSON：
-{"name":"菜名","description":"简短描述","prepTime":10,"cookTime":15,"ingredients":[{"name":"食材","quantity":1,"unit":"个"}],"steps":["步骤1","步骤2"],"tips":"技巧","tags":["标签"],"nutrition":{"calories":200,"protein":15,"carbs":20,"fat":8}}
+返回JSON（单位规范：条状蔬菜用"根"，叶菜用"把"，圆形蔬果用"个"，块状用"块"，重量用"克"）：
+{"name":"菜名","description":"简短描述","prepTime":10,"cookTime":15,"ingredients":[{"name":"食材","quantity":1,"unit":"根"}],"steps":["步骤1","步骤2"],"tips":"技巧","tags":["标签"],"nutrition":{"calories":200,"protein":15,"carbs":20,"fat":8}}
 
 只返回JSON。''',
           },

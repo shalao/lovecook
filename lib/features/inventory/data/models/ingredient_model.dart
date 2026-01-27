@@ -1,6 +1,9 @@
 import 'package:hive/hive.dart';
+import 'package:uuid/uuid.dart';
 
 part 'ingredient_model.g.dart';
+
+const _uuid = Uuid();
 
 @HiveType(typeId: 10)
 class IngredientModel extends HiveObject {
@@ -72,7 +75,7 @@ class IngredientModel extends HiveObject {
   }) {
     final now = DateTime.now();
     return IngredientModel(
-      id: now.millisecondsSinceEpoch.toString(),
+      id: _uuid.v4(),
       familyId: familyId,
       name: name,
       category: category,

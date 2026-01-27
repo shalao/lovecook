@@ -5,8 +5,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/unit_converter.dart';
 import '../../../family/data/repositories/family_repository.dart';
 import '../../../inventory/data/models/ingredient_model.dart';
+import '../../../inventory/data/repositories/ingredient_repository.dart';
 import '../../../inventory/presentation/providers/inventory_provider.dart';
 import '../../data/models/shopping_list_model.dart';
 import '../../data/repositories/shopping_list_repository.dart';
@@ -314,25 +316,90 @@ class _ShoppingListTab extends ConsumerWidget {
 
     try {
       final inventoryNotifier = ref.read(inventoryProvider.notifier);
+      final ingredientRepo = ref.read(ingredientRepositoryProvider);
       final shoppingRepo = ref.read(shoppingListRepositoryProvider);
 
-      // 1. 批量准备所有食材（避免循环中重复调用 loadIngredients 导致竞态条件）
-      final ingredients = <IngredientModel>[];
+      // 1. 分离需要更新的和需要新增的食材
+      final ingredientsToAdd = <IngredientModel>[];
+      final ingredientsToUpdate = <IngredientModel>[];
+
       for (final item in items) {
-        final ingredient = IngredientModel.create(
-          familyId: familyId,
-          name: item.name,
-          category: item.category,
-          quantity: item.quantity,
-          unit: item.unit,
-          source: 'shopping',
-          expiryDate: _getDefaultExpiryDate(item.category ?? '其他'),
+        // 查找是否已有同名食材（支持单位等价匹配）
+        final (existing, isEquivalentUnit) = ingredientRepo.findByNameWithUnit(
+          familyId,
+          item.name,
+          item.unit,
         );
-        ingredients.add(ingredient);
+
+        if (existing != null) {
+          // 找到可合并的食材
+          double newQuantity;
+          String newUnit = existing.unit;
+
+          if (isEquivalentUnit) {
+            // 单位等价但不同，需要换算
+            final merged = UnitConverter.mergeQuantities(
+              quantity1: existing.quantity,
+              unit1: existing.unit,
+              quantity2: item.quantity,
+              unit2: item.unit,
+              ingredientName: item.name,
+            );
+            if (merged != null) {
+              newQuantity = merged.quantity;
+              newUnit = merged.unit;
+            } else {
+              // 无法换算，作为新食材添加
+              final ingredient = IngredientModel.create(
+                familyId: familyId,
+                name: item.name,
+                category: item.category,
+                quantity: item.quantity,
+                unit: item.unit,
+                source: 'shopping',
+                expiryDate: _getDefaultExpiryDate(item.category ?? '其他'),
+              );
+              ingredientsToAdd.add(ingredient);
+              continue;
+            }
+          } else {
+            // 单位相同，直接累加
+            newQuantity = existing.quantity + item.quantity;
+          }
+
+          final updated = existing.copyWith(
+            quantity: newQuantity,
+            unit: newUnit,
+            updatedAt: DateTime.now(),
+          );
+          ingredientsToUpdate.add(updated);
+        } else {
+          // 不存在，创建新食材
+          final ingredient = IngredientModel.create(
+            familyId: familyId,
+            name: item.name,
+            category: item.category,
+            quantity: item.quantity,
+            unit: item.unit,
+            source: 'shopping',
+            expiryDate: _getDefaultExpiryDate(item.category ?? '其他'),
+          );
+          ingredientsToAdd.add(ingredient);
+        }
       }
 
-      // 2. 批量添加到库存（只调用一次 loadIngredients）
-      await inventoryNotifier.addIngredients(ingredients);
+      // 2. 批量保存更新的食材
+      if (ingredientsToUpdate.isNotEmpty) {
+        await ingredientRepo.saveIngredients(ingredientsToUpdate);
+      }
+
+      // 3. 批量添加新食材到库存
+      if (ingredientsToAdd.isNotEmpty) {
+        await inventoryNotifier.addIngredients(ingredientsToAdd);
+      }
+
+      // 刷新库存状态
+      await inventoryNotifier.loadIngredients();
 
       // 3. 批量从购物清单移除
       for (final item in items) {
@@ -352,8 +419,9 @@ class _ShoppingListTab extends ConsumerWidget {
         ),
       );
 
-      // 刷新购物清单
+      // 刷新购物清单和库存
       ref.invalidate(familyShoppingListsProvider(familyId));
+      ref.invalidate(inventoryProvider);
     } catch (e) {
       // 关闭对话框
       if (navigator.canPop()) {
@@ -368,6 +436,7 @@ class _ShoppingListTab extends ConsumerWidget {
       );
       // 即使失败也刷新，确保 UI 状态一致
       ref.invalidate(familyShoppingListsProvider(familyId));
+      ref.invalidate(inventoryProvider);
     }
   }
 

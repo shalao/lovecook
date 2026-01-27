@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/storage_service.dart';
+import '../../../../core/utils/unit_converter.dart';
 import '../models/ingredient_model.dart';
 
 /// 食材同义词/别名映射
@@ -148,7 +149,8 @@ class IngredientRepository {
     if (ingredient != null) {
       ingredient.quantity = newQuantity;
       ingredient.updatedAt = DateTime.now();
-      await ingredient.save();
+      // 使用 put 而不是 save，确保修改被正确保存
+      await _storage.ingredientsBox.put(id, ingredient);
     }
   }
 
@@ -158,7 +160,8 @@ class IngredientRepository {
     if (ingredient != null) {
       ingredient.quantity = (ingredient.quantity - amount).clamp(0.0, double.infinity);
       ingredient.updatedAt = DateTime.now();
-      await ingredient.save();
+      // 使用 put 而不是 save，确保修改被正确保存
+      await _storage.ingredientsBox.put(id, ingredient);
     }
   }
 
@@ -266,6 +269,93 @@ class IngredientRepository {
     return null;
   }
 
+  /// 根据名称和单位查找食材（支持单位等价匹配）
+  /// 返回: (匹配的食材, 是否单位等价)
+  (IngredientModel?, bool) findByNameWithUnit(
+    String familyId,
+    String name,
+    String unit,
+  ) {
+    final lowercaseName = name.toLowerCase().trim();
+    final ingredients = getIngredientsByFamily(familyId);
+
+    // 精确匹配名称
+    for (final ing in ingredients) {
+      if (ing.name.toLowerCase().trim() == lowercaseName) {
+        // 检查单位是否相同或等价
+        if (ing.unit == unit) {
+          return (ing, false);
+        }
+        if (UnitConverter.areUnitsEquivalent(ing.unit, unit)) {
+          return (ing, true);
+        }
+      }
+    }
+
+    // 同义词匹配
+    final synonyms = _getIngredientSynonyms(name);
+    for (final synonym in synonyms) {
+      for (final ing in ingredients) {
+        if (ing.name.toLowerCase().trim() == synonym.toLowerCase().trim()) {
+          if (ing.unit == unit) {
+            return (ing, false);
+          }
+          if (UnitConverter.areUnitsEquivalent(ing.unit, unit)) {
+            return (ing, true);
+          }
+        }
+      }
+    }
+
+    return (null, false);
+  }
+
+  /// 合并食材数量（支持单位换算）
+  Future<bool> mergeIngredient({
+    required String familyId,
+    required String name,
+    required double quantity,
+    required String unit,
+    String? category,
+  }) async {
+    final (existing, isEquivalentUnit) = findByNameWithUnit(familyId, name, unit);
+
+    if (existing == null) {
+      return false; // 没有找到可合并的食材
+    }
+
+    double newQuantity;
+    String newUnit = existing.unit;
+
+    if (isEquivalentUnit) {
+      // 单位等价但不同，需要换算
+      final merged = UnitConverter.mergeQuantities(
+        quantity1: existing.quantity,
+        unit1: existing.unit,
+        quantity2: quantity,
+        unit2: unit,
+        ingredientName: name,
+      );
+      if (merged == null) {
+        return false; // 无法换算
+      }
+      newQuantity = merged.quantity;
+      newUnit = merged.unit;
+    } else {
+      // 单位相同，直接累加
+      newQuantity = existing.quantity + quantity;
+    }
+
+    // 更新食材
+    final updated = existing.copyWith(
+      quantity: newQuantity,
+      unit: newUnit,
+      updatedAt: DateTime.now(),
+    );
+    await saveIngredient(updated);
+    return true;
+  }
+
   /// 获取食材的所有同义词
   List<String> _getIngredientSynonyms(String name) {
     final lowercaseName = name.toLowerCase().trim();
@@ -329,7 +419,8 @@ class IngredientRepository {
 
     // 保存合并后的数据
     for (final ing in merged.values) {
-      await ing.save();
+      // 使用 put 而不是 save，确保修改被正确保存
+      await _storage.ingredientsBox.put(ing.id, ing);
     }
   }
 
