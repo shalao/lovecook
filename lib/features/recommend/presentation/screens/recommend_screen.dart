@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router.dart';
+import '../../../../core/services/log_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../recipe/data/models/recipe_model.dart';
 import '../../../recipe/data/repositories/recipe_repository.dart';
@@ -509,6 +510,11 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
           Expanded(
             child: OutlinedButton.icon(
               onPressed: () async {
+                const page = 'RecommendScreen';
+                const action = '购物清单按钮';
+
+                logger.info(page, action, '用户点击购物清单按钮');
+
                 // 生成购物清单
                 final shoppingListId = await ref
                     .read(recommendProvider.notifier)
@@ -517,6 +523,9 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
                 if (!mounted) return;
 
                 if (shoppingListId != null) {
+                  logger.info(page, action, '跳转到购物清单页面', data: {
+                    'shoppingListId': shoppingListId,
+                  });
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('已生成购物清单'),
@@ -525,10 +534,20 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
                       duration: Duration(seconds: 2),
                     ),
                   );
+                  // 跳转到购物清单页面
+                  context.push(AppRoutes.shopping);
+                } else {
+                  logger.warning(page, action, '购物清单生成返回null');
+                  // 生成失败，显示错误信息
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('生成购物清单失败，请确保已有确认的菜单'),
+                      backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
                 }
-
-                // 跳转到购物清单页面
-                context.push(AppRoutes.shopping);
               },
               icon: const Icon(Icons.shopping_cart_outlined, size: 18),
               label: const Text('生成清单'),

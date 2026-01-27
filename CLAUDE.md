@@ -20,6 +20,11 @@ flutter pub run build_runner build
 # 开发模式运行
 flutter run -d chrome
 
+# 开发模式运行（带日志保存）
+./scripts/run_with_log.sh
+# 或手动指定日志文件：
+flutter run -d chrome 2>&1 | tee logs/app.log
+
 # 代码分析
 flutter analyze
 
@@ -172,3 +177,29 @@ NO_PROXY=localhost,127.0.0.1 flutter test
 | `ai_service_pure_dart_test.dart` | AI 服务纯 Dart 测试（不依赖 Flutter） |
 | `recommend_settings_test.dart` | 推荐设置模型测试 |
 | `day_plan_test.dart` | 日计划和推荐状态测试 |
+
+### 日志系统
+
+应用使用 `LogService` (`lib/core/services/log_service.dart`) 进行结构化日志记录。
+
+**日志格式**：
+```
+[时间戳] [级别] [页面] [操作]
+  Message: 消息内容
+  Data: 附加数据
+```
+
+**日志级别**：`DEBUG` < `INFO` < `WARNING` < `ERROR`
+
+**查看日志**：
+1. 使用 `./scripts/run_with_log.sh` 运行应用
+2. 日志保存在 `logs/app_YYYYMMDD_HHMMSS.log`
+3. 问题定位时查看最新的日志文件
+
+**关键日志点**：
+- `[RecommendScreen] [购物清单按钮]` - 用户点击购物清单按钮
+- `[RecommendProvider] [生成购物清单]` - 购物清单生成流程
+- `[AIService] [generateMealPlan]` - AI 菜单生成 API 调用
+- `[AIService] [suggestRecipes]` - AI 菜谱推荐 API 调用
+
+**问题排查**：当遇到问题时，查看 `logs/` 目录下最新的日志文件，搜索 `WARNING` 或 `ERROR` 级别的日志

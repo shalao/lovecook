@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../../core/services/ai_service.dart';
+import '../../../../core/services/log_service.dart';
 import '../../../../core/services/storage_service.dart';
 import '../../../family/data/models/family_model.dart';
 import '../../../family/data/repositories/family_repository.dart';
@@ -357,6 +358,7 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
   }
 
   /// 将 MealPlanModel 转换为 DayPlan 列表
+  /// 只返回包含有效菜谱的 DayPlan
   List<DayPlan> _convertMealPlanToDayPlans(MealPlanModel plan) {
     final dayPlans = <DayPlan>[];
 
@@ -400,14 +402,19 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
         }
       }
 
-      dayPlans.add(DayPlan(
+      final dayPlan = DayPlan(
         dayIndex: i,
         date: dayModel.date,
         breakfast: breakfast,
         lunch: lunch,
         dinner: dinner,
         snacks: snacks,
-      ));
+      );
+
+      // 只添加有菜谱的 DayPlan
+      if (dayPlan.hasAnyRecipes) {
+        dayPlans.add(dayPlan);
+      }
     }
 
     return dayPlans;
@@ -904,8 +911,24 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
   /// 如果已有关联清单则更新，否则创建新的
   /// v1.2.1: 带日期和用量溯源信息
   Future<String?> generateShoppingListFromConfirmedMenu() async {
-    if (_currentFamily == null) return null;
-    if (state.confirmedDayPlans.isEmpty) return null;
+    const page = 'RecommendProvider';
+    const action = '生成购物清单';
+
+    logger.info(page, action, '开始生成购物清单');
+
+    if (_currentFamily == null) {
+      logger.warning(page, action, '当前家庭为空，无法生成购物清单');
+      return null;
+    }
+
+    if (state.confirmedDayPlans.isEmpty) {
+      logger.warning(page, action, '确认的日计划为空', data: {
+        'viewMode': state.viewMode.toString(),
+        'confirmedPlanId': state.confirmedPlan?.id,
+        'dayPlansCount': state.dayPlans.length,
+      });
+      return null;
+    }
 
     try {
       // 收集所有菜谱，并附带日期和餐次信息
@@ -945,18 +968,32 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
         }
       }
 
-      if (recipesWithDates.isEmpty) return null;
+      if (recipesWithDates.isEmpty) {
+        logger.warning(page, action, '没有找到任何菜谱', data: {
+          'confirmedDayPlansCount': state.confirmedDayPlans.length,
+        });
+        return null;
+      }
+
+      logger.info(page, action, '找到菜谱', data: {
+        'recipesCount': recipesWithDates.length,
+        'inventoryCount': _inventory.length,
+      });
 
       final mealPlanId = state.confirmedPlan?.id;
 
       // 检查是否已有关联的购物清单
       ShoppingListModel? existingList;
       if (mealPlanId != null) {
-        existingList = _shoppingListRepository.getShoppingListByMealPlanId(mealPlanId);
+        existingList =
+            _shoppingListRepository.getShoppingListByMealPlanId(mealPlanId);
       }
 
       if (existingList != null) {
         // 更新已有购物清单（带日期信息）
+        logger.info(page, action, '更新已有购物清单', data: {
+          'existingListId': existingList.id,
+        });
         await _shoppingListRepository.updateShoppingListItemsWithDates(
           shoppingListId: existingList.id,
           recipesWithDates: recipesWithDates,
@@ -964,9 +1001,13 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
         );
         _ref.invalidate(shoppingListRepositoryProvider);
         _ref.invalidate(familyShoppingListsProvider(_currentFamily.id));
+        logger.info(page, action, '购物清单更新成功', data: {
+          'shoppingListId': existingList.id,
+        });
         return existingList.id;
       } else {
         // 创建新的购物清单（带日期和用量溯源）
+        logger.info(page, action, '创建新的购物清单');
         final shoppingList = _shoppingListRepository.generateFromRecipesWithDates(
           familyId: _currentFamily.id,
           recipesWithDates: recipesWithDates,
@@ -977,10 +1018,15 @@ class RecommendNotifier extends StateNotifier<RecommendState> {
         await _shoppingListRepository.saveShoppingList(shoppingList);
         _ref.invalidate(shoppingListRepositoryProvider);
         _ref.invalidate(familyShoppingListsProvider(_currentFamily.id));
+        logger.info(page, action, '购物清单生成成功', data: {
+          'shoppingListId': shoppingList.id,
+          'itemsCount': shoppingList.items.length,
+        });
         return shoppingList.id;
       }
-    } catch (e) {
-      debugPrint('生成购物清单失败: $e');
+    } catch (e, stack) {
+      logger.error(page, action, '生成购物清单时发生异常',
+          error: e, stackTrace: stack);
       return null;
     }
   }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../features/family/data/models/dietary_options.dart';
+import 'log_service.dart';
 import '../../features/family/data/models/family_model.dart';
 import '../../features/inventory/data/models/ingredient_model.dart';
 import '../../features/recipe/data/models/recipe_model.dart';
@@ -250,6 +251,15 @@ class AIService {
     // 每天约需 1500-2000 tokens (含所有餐次和菜品)
     final maxTokens = 4096 + days * 2000;
 
+    logger.apiCall('AIService', 'generateMealPlan', api: 'OpenAI GPT', request: {
+      'days': days,
+      'mealTypes': mealTypes,
+      'dishesPerMeal': dishesPerMeal,
+      'familyId': family.id,
+      'inventoryCount': inventory.length,
+      'hasMoodInput': moodInput != null && moodInput.isNotEmpty,
+    });
+
     try {
       final response = await _proxyService.chatCompletions(
         model: config.model,
@@ -344,8 +354,18 @@ $preferenceInfo
       final jsonStr = _extractJson(content);
       final data = json.decode(jsonStr) as Map<String, dynamic>;
 
-      return MenuPlanResult.fromJson(data);
+      final result = MenuPlanResult.fromJson(data);
+      logger.apiCall('AIService', 'generateMealPlan', api: 'OpenAI GPT', response: {
+        'status': 'success',
+        'daysCount': result.days.length,
+        'shoppingListCount': result.shoppingList.length,
+      });
+      return result;
     } on AiProxyException catch (e) {
+      logger.apiCall('AIService', 'generateMealPlan', api: 'OpenAI GPT', response: {
+        'status': 'error',
+        'error': e.message,
+      }, isError: true);
       throw AIServiceException('生成菜单失败: ${e.message}');
     }
   }
@@ -358,6 +378,12 @@ $preferenceInfo
   }) async {
     final inventoryInfo = _buildInventoryInfo(inventory);
     final familyInfo = _buildFamilyInfo(family);
+
+    logger.apiCall('AIService', 'suggestRecipes', api: 'OpenAI GPT', request: {
+      'count': count,
+      'inventoryCount': inventory.length,
+      'familyId': family.id,
+    });
 
     try {
       final response = await _proxyService.chatCompletions(
@@ -403,8 +429,17 @@ $familyInfo
       final jsonStr = _extractJson(content);
       final List<dynamic> items = json.decode(jsonStr);
 
-      return items.map((item) => _parseRecipe(item)).toList();
+      final recipes = items.map((item) => _parseRecipe(item)).toList();
+      logger.apiCall('AIService', 'suggestRecipes', api: 'OpenAI GPT', response: {
+        'status': 'success',
+        'recipesCount': recipes.length,
+      });
+      return recipes;
     } on AiProxyException catch (e) {
+      logger.apiCall('AIService', 'suggestRecipes', api: 'OpenAI GPT', response: {
+        'status': 'error',
+        'error': e.message,
+      }, isError: true);
       throw AIServiceException('推荐失败: ${e.message}');
     }
   }
@@ -415,6 +450,11 @@ $familyInfo
     required FamilyModel family,
   }) async {
     final familyInfo = _buildFamilyInfo(family);
+
+    logger.apiCall('AIService', 'generateRecipe', api: 'OpenAI GPT', request: {
+      'dishName': dishName,
+      'familyId': family.id,
+    });
 
     try {
       final response = await _proxyService.chatCompletions(
@@ -458,8 +498,17 @@ $familyInfo
       final jsonStr = _extractJson(content);
       final data = json.decode(jsonStr) as Map<String, dynamic>;
 
-      return _parseRecipe(data);
+      final recipe = _parseRecipe(data);
+      logger.apiCall('AIService', 'generateRecipe', api: 'OpenAI GPT', response: {
+        'status': 'success',
+        'recipeName': recipe.name,
+      });
+      return recipe;
     } on AiProxyException catch (e) {
+      logger.apiCall('AIService', 'generateRecipe', api: 'OpenAI GPT', response: {
+        'status': 'error',
+        'error': e.message,
+      }, isError: true);
       throw AIServiceException('生成菜谱失败: ${e.message}');
     }
   }
