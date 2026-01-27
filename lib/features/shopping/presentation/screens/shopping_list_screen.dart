@@ -292,14 +292,15 @@ class _ShoppingListTab extends ConsumerWidget {
     List<ShoppingItemModel> items,
     ShoppingListModel shoppingList,
   ) async {
-    // 提前保存引用，避免 async 操作后 context 失效导致 Navigator locked 错误
-    final navigator = Navigator.of(context);
+    // 使用 rootNavigator 确保能正确关闭对话框
+    final navigator = Navigator.of(context, rootNavigator: true);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     // 显示加载对话框
     showDialog(
       context: context,
       barrierDismissible: false,
+      useRootNavigator: true,  // 使用根导航器
       builder: (ctx) => const AlertDialog(
         content: Row(
           children: [
@@ -340,8 +341,10 @@ class _ShoppingListTab extends ConsumerWidget {
 
       final successCount = items.length;
 
-      // 使用保存的引用关闭对话框，避免 Navigator locked 错误
-      navigator.pop();
+      // 关闭对话框并显示成功消息
+      if (navigator.canPop()) {
+        navigator.pop();
+      }
       scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text('成功将 $successCount 项食材添加到库存'),
@@ -352,8 +355,10 @@ class _ShoppingListTab extends ConsumerWidget {
       // 刷新购物清单
       ref.invalidate(familyShoppingListsProvider(familyId));
     } catch (e) {
-      // 使用保存的引用关闭对话框
-      navigator.pop();
+      // 关闭对话框
+      if (navigator.canPop()) {
+        navigator.pop();
+      }
       scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text('添加失败: $e'),
