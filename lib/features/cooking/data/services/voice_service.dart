@@ -1,11 +1,15 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../../../../core/services/ai_proxy_service.dart';
+import '../../../../core/services/log_service.dart';
 
 /// 语音服务 - 处理语音识别 (STT) 和语音合成 (TTS)
 class VoiceService {
@@ -14,6 +18,8 @@ class VoiceService {
   final AudioPlayer _player = AudioPlayer();
 
   String? _recordingPath;
+  StreamSubscription<PlayerState>? _playerSubscription;
+  Completer<void>? _playbackCompleter;
 
   VoiceService({required AiProxyService proxyService})
       : _proxyService = proxyService;
@@ -92,7 +98,20 @@ class VoiceService {
   Future<void> speak(String text) async {
     if (text.isEmpty) return;
 
+    logger.info('VoiceService', 'speak', '开始语音合成', data: {'textLength': text.length});
+
+    // 取消之前的播放监听器和 completer
+    await _playerSubscription?.cancel();
+    _playerSubscription = null;
+    if (_playbackCompleter != null && !_playbackCompleter!.isCompleted) {
+      _playbackCompleter!.complete();
+    }
+    _playbackCompleter = null;
+
+    File? tempFile;
+
     try {
+      logger.info('VoiceService', 'speak', '调用 TTS API...');
       final audioData = await _proxyService.audioSpeech(
         text: text,
         model: 'tts-1',
@@ -100,31 +119,77 @@ class VoiceService {
         responseFormat: 'mp3',
       );
 
-      // 保存音频到临时文件
-      final dir = await getTemporaryDirectory();
-      final audioPath = '${dir.path}/tts_${DateTime.now().millisecondsSinceEpoch}.mp3';
-      final file = File(audioPath);
-      await file.writeAsBytes(audioData);
+      logger.info('VoiceService', 'speak', 'TTS API 返回成功', data: {'audioSize': audioData.length});
 
-      // 播放音频
-      await _player.setFilePath(audioPath);
-      await _player.play();
+      // 使用 Completer 等待播放完成
+      _playbackCompleter = Completer<void>();
 
-      // 等待播放完成后删除文件
-      _player.playerStateStream.listen((state) async {
+      // 监听播放状态
+      _playerSubscription = _player.playerStateStream.listen((state) async {
+        logger.info('VoiceService', 'speak', '播放状态变化', data: {
+          'playing': state.playing,
+          'processingState': state.processingState.toString(),
+        });
         if (state.processingState == ProcessingState.completed) {
-          try {
-            await file.delete();
-          } catch (_) {}
+          // 清理临时文件（非 Web 平台）
+          if (!kIsWeb && tempFile != null) {
+            try {
+              await tempFile.delete();
+            } catch (_) {}
+          }
+          // 播放完成，完成 Completer
+          if (_playbackCompleter != null && !_playbackCompleter!.isCompleted) {
+            logger.info('VoiceService', 'speak', '播放完成');
+            _playbackCompleter!.complete();
+          }
         }
       });
+
+      // 根据平台选择播放方式
+      if (kIsWeb) {
+        // Web 平台：使用 Data URL
+        final base64Audio = base64Encode(audioData);
+        final dataUrl = 'data:audio/mp3;base64,$base64Audio';
+        logger.info('VoiceService', 'speak', 'Web 平台：使用 Data URL 播放');
+        await _player.setUrl(dataUrl);
+      } else {
+        // 非 Web 平台：保存到临时文件
+        final dir = await getTemporaryDirectory();
+        final audioPath = '${dir.path}/tts_${DateTime.now().millisecondsSinceEpoch}.mp3';
+        tempFile = File(audioPath);
+        await tempFile.writeAsBytes(audioData);
+        logger.info('VoiceService', 'speak', '非 Web 平台：保存到临时文件', data: {'path': audioPath});
+        await _player.setFilePath(audioPath);
+      }
+
+      logger.info('VoiceService', 'speak', '开始播放音频');
+      await _player.play();
+
+      // 等待播放完成
+      await _playbackCompleter!.future;
     } on AiProxyException catch (e) {
+      logger.error('VoiceService', 'speak', '语音合成失败', error: e.message);
       throw VoiceServiceException('语音合成失败: ${e.message}');
+    } catch (e, stackTrace) {
+      logger.error('VoiceService', 'speak', '播放失败', error: e, stackTrace: stackTrace);
+      throw VoiceServiceException('播放失败: $e');
+    } finally {
+      // 清理监听器
+      await _playerSubscription?.cancel();
+      _playerSubscription = null;
+      _playbackCompleter = null;
     }
   }
 
   /// 停止播放
   Future<void> stopSpeaking() async {
+    await _playerSubscription?.cancel();
+    _playerSubscription = null;
+    // 完成 completer，让 speak() 方法可以退出
+    if (_playbackCompleter != null && !_playbackCompleter!.isCompleted) {
+      _playbackCompleter!.complete();
+    }
+    _playbackCompleter = null;
     await _player.stop();
   }
 
@@ -136,6 +201,12 @@ class VoiceService {
 
   /// 释放资源
   Future<void> dispose() async {
+    await _playerSubscription?.cancel();
+    _playerSubscription = null;
+    if (_playbackCompleter != null && !_playbackCompleter!.isCompleted) {
+      _playbackCompleter!.complete();
+    }
+    _playbackCompleter = null;
     await _recorder.dispose();
     await _player.dispose();
   }

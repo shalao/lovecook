@@ -35,9 +35,17 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
         setState(() => _remainingSeconds--);
       } else {
         timer.cancel();
-        // 可以添加提示音
+        // 播放提示音
+        _playTimerAlert();
       }
     });
+  }
+
+  /// 播放计时器结束提示
+  void _playTimerAlert() {
+    final notifier = ref.read(cookingProvider(widget.recipe).notifier);
+    // 使用语音服务朗读提示
+    notifier.speakTimerAlert();
   }
 
   void _stopTimer() {

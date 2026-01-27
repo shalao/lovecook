@@ -183,6 +183,15 @@ class CookingNotifier extends StateNotifier<CookingState> {
     state = state.copyWith(isSpeaking: false);
   }
 
+  /// 播放计时器结束提示
+  Future<void> speakTimerAlert() async {
+    try {
+      await _voiceService.speak('时间到了！');
+    } on VoiceServiceException catch (e) {
+      state = state.copyWith(error: e.message);
+    }
+  }
+
   /// 开始录音
   Future<void> startRecording() async {
     try {

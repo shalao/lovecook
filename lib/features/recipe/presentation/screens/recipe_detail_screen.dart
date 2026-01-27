@@ -9,6 +9,7 @@ import '../../../history/presentation/providers/history_provider.dart';
 import '../../../inventory/data/models/ingredient_model.dart';
 import '../../../inventory/presentation/providers/inventory_provider.dart';
 import '../../../menu/data/repositories/meal_plan_repository.dart';
+import '../../../recommend/presentation/providers/recommend_provider.dart';
 import '../../data/models/recipe_model.dart';
 import '../../data/repositories/recipe_repository.dart';
 
@@ -1280,6 +1281,14 @@ class _CompleteCookingDialogState extends ConsumerState<_CompleteCookingDialog> 
         mealType: _selectedMealType,
         recipeId: widget.recipe.id,
         recipeName: widget.recipe.name,
+      );
+
+      // 从推荐菜单中移除已吃的菜谱
+      // 注意：_selectedMealType 使用 'snacks'，但 MealModel 保存时使用 'snack'
+      await ref.read(recommendProvider.notifier).removeEatenRecipe(
+        recipeId: widget.recipe.id,
+        date: DateTime.now(),
+        mealType: _selectedMealType == 'snacks' ? 'snack' : _selectedMealType,
       );
 
       if (mounted) {
