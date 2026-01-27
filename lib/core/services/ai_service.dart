@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -249,7 +250,8 @@ class AIService {
 
     // 根据天数动态调整 token 限制，确保多天菜单完整生成
     // 每天约需 1500-2000 tokens (含所有餐次和菜品)
-    final maxTokens = 4096 + days * 2000;
+    // 注意：GPT-4o 等模型最大支持 16384 completion tokens
+    final maxTokens = min(4096 + days * 2000, 16384);
 
     logger.apiCall('AIService', 'generateMealPlan', api: 'OpenAI GPT', request: {
       'days': days,
