@@ -99,8 +99,8 @@ class _ShoppingListTab extends ConsumerWidget {
         Expanded(
           child: _ShoppingListContent(
             shoppingList: latestList,
-            onTogglePurchased: (itemId) {
-              ref.read(shoppingListRepositoryProvider).toggleItemPurchased(
+            onTogglePurchased: (itemId) async {
+              await ref.read(shoppingListRepositoryProvider).toggleItemPurchased(
                     latestList.id,
                     itemId,
                   );
@@ -108,9 +108,8 @@ class _ShoppingListTab extends ConsumerWidget {
             },
           ),
         ),
-        // 底部入库按钮
-        if (latestList.purchasedCount > 0)
-          _buildAddToInventoryBar(context, ref, latestList),
+        // 底部操作栏（全选/入库）
+        _buildBottomActionBar(context, ref, latestList),
       ],
     );
   }
@@ -189,14 +188,16 @@ class _ShoppingListTab extends ConsumerWidget {
     );
   }
 
-  /// 底部入库按钮栏
-  Widget _buildAddToInventoryBar(
+  /// 底部操作栏（全选/入库）
+  Widget _buildBottomActionBar(
     BuildContext context,
     WidgetRef ref,
     ShoppingListModel list,
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final purchasedItems = list.items.where((item) => item.purchased).toList();
+    final allPurchased = list.items.isNotEmpty && purchasedItems.length == list.items.length;
+    final hasPurchased = purchasedItems.isNotEmpty;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -212,24 +213,49 @@ class _ShoppingListTab extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.inventory_2_outlined,
-            color: AppColors.primary,
+          // 全选/取消全选按钮
+          OutlinedButton.icon(
+            onPressed: () async {
+              final repo = ref.read(shoppingListRepositoryProvider);
+              if (allPurchased) {
+                await repo.resetAllPurchased(list.id);
+              } else {
+                await repo.markAllPurchased(list.id);
+              }
+              ref.invalidate(familyShoppingListsProvider(familyId));
+            },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: isDark ? AppColors.textPrimaryDark : AppColors.textPrimary,
+              side: BorderSide(
+                color: isDark ? AppColors.borderDark : AppColors.border,
+              ),
+            ),
+            icon: Icon(
+              allPurchased ? Icons.deselect : Icons.select_all,
+              size: 18,
+            ),
+            label: Text(allPurchased ? '取消全选' : '全选'),
           ),
           const SizedBox(width: 12),
+          // 已选提示
           Expanded(
             child: Text(
-              '${purchasedItems.length} 项已购食材可入库',
+              hasPurchased ? '${purchasedItems.length} 项已选' : '请选择要入库的食材',
               style: TextStyle(
                 color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
               ),
             ),
           ),
+          // 入库按钮
           ElevatedButton.icon(
-            onPressed: () => _showAddToInventoryDialog(context, ref, purchasedItems, list),
+            onPressed: hasPurchased
+                ? () => _showAddToInventoryDialog(context, ref, purchasedItems, list)
+                : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
+              disabledBackgroundColor: isDark ? Colors.grey[700] : Colors.grey[300],
+              disabledForegroundColor: isDark ? Colors.grey[500] : Colors.grey[500],
             ),
             icon: const Icon(Icons.add_home, size: 18),
             label: const Text('入库'),
