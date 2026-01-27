@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router.dart';
+import '../../../../core/services/log_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../recipe/data/models/recipe_model.dart';
 import '../../../recipe/data/repositories/recipe_repository.dart';
@@ -340,6 +341,18 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
                       color: isDark ? AppColors.textTertiaryDark : Colors.grey.shade500,
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  // 关闭按钮
+                  IconButton(
+                    icon: Icon(
+                      Icons.close,
+                      color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    tooltip: '关闭',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
                 ],
               ),
             ),
@@ -561,9 +574,8 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
           TextButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
-              final repository = ref.read(mealPlanRepositoryProvider);
-              await repository.deleteMeals(
-                familyId: widget.plan.familyId,
+              // 通过 Provider 删除
+              await ref.read(menuGenerateProvider.notifier).deleteMeals(
                 date: day.date,
                 mealTypes: [meal.type],
               );
@@ -571,13 +583,19 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
               // 同步刷新推荐页数据
               ref.invalidate(recommendProvider);
               if (context.mounted) {
-                Navigator.pop(context); // 关闭详情弹窗
+                // 先显示成功提示
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('已删除${meal.label}'),
                     behavior: SnackBarBehavior.floating,
                   ),
                 );
+                // 弹窗询问是否同步购物清单（在详情弹窗还打开时）
+                await _showSyncShoppingListDialog(context, widget.plan.familyId);
+                // 最后关闭详情弹窗
+                if (context.mounted) {
+                  Navigator.pop(context);
+                }
               }
             },
             child: Text('删除', style: TextStyle(color: Colors.red.shade600)),
@@ -608,9 +626,8 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
           TextButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
-              final repository = ref.read(mealPlanRepositoryProvider);
-              await repository.deleteRecipeFromMeal(
-                familyId: widget.plan.familyId,
+              // 通过 Provider 删除
+              await ref.read(menuGenerateProvider.notifier).deleteRecipe(
                 date: day.date,
                 mealType: meal.type,
                 recipeIndex: recipeIndex,
@@ -619,13 +636,19 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
               // 同步刷新推荐页数据
               ref.invalidate(recommendProvider);
               if (context.mounted) {
-                Navigator.pop(context); // 关闭详情弹窗
+                // 先显示成功提示
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('已删除"$recipeName"'),
                     behavior: SnackBarBehavior.floating,
                   ),
                 );
+                // 弹窗询问是否同步购物清单（在详情弹窗还打开时）
+                await _showSyncShoppingListDialog(context, widget.plan.familyId);
+                // 最后关闭详情弹窗
+                if (context.mounted) {
+                  Navigator.pop(context);
+                }
               }
             },
             child: Text('删除', style: TextStyle(color: Colors.red.shade600)),
@@ -637,16 +660,23 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
 
   /// 使用 AI 重新生成替换菜品
   Future<void> _replaceRecipeWithAI(
-    BuildContext context,
+    BuildContext bottomSheetContext,  // 重命名：明确这是底部弹窗上下文
     DayPlanModel day,
     MealModel meal,
     int recipeIndex,
     String currentRecipeName,
   ) async {
+    logger.info('MenuScreen', '_replaceRecipeWithAI', '开始 AI 替换菜品',
+        data: {'currentRecipeName': currentRecipeName, 'mealType': meal.type});
+
     // 显示加载对话框
+    // 注意：showDialog 默认使用 rootNavigator，所以这里也必须使用 rootNavigator: true
+    // 否则 pop 时会从错误的 Navigator 弹出，导致 "popped the last page off of the stack" 错误
+    final rootNavigator = Navigator.of(bottomSheetContext, rootNavigator: true);
     showDialog(
-      context: context,
+      context: bottomSheetContext,
       barrierDismissible: false,
+      useRootNavigator: true, // 明确指定使用根导航器（默认值，但显式声明更清晰）
       builder: (dialogContext) => AlertDialog(
         content: Row(
           children: [
@@ -671,20 +701,38 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
       );
 
       ref.read(menuListProvider.notifier).loadPlans();
+      // 同步刷新推荐页数据
+      ref.invalidate(recommendProvider);
 
-      if (context.mounted) {
-        Navigator.pop(context); // 关闭加载对话框
-        Navigator.pop(context); // 关闭详情弹窗
+      // 关闭加载对话框（使用根导航器）
+      if (mounted) {
+        rootNavigator.pop();
+        logger.log(page: 'MenuScreen', action: '_replaceRecipeWithAI', message: '已关闭加载对话框', level: LogLevel.debug);
+      }
+
+      // 后续操作使用 this.context（底部弹窗上下文，State 的 context）
+      if (mounted) {
+        // 先显示成功提示
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('菜品已替换'),
             behavior: SnackBarBehavior.floating,
           ),
         );
+        // 弹窗询问是否同步购物清单（在详情弹窗还打开时）
+        await _showSyncShoppingListDialog(context, widget.plan.familyId);
+        // 最后关闭详情弹窗
+        if (mounted) {
+          Navigator.pop(context);
+          logger.log(page: 'MenuScreen', action: '_replaceRecipeWithAI', message: '已关闭详情弹窗', level: LogLevel.debug);
+        }
       }
+      logger.info('MenuScreen', '_replaceRecipeWithAI', 'AI 替换完成');
     } catch (e) {
-      if (context.mounted) {
-        Navigator.pop(context); // 关闭加载对话框
+      logger.error('MenuScreen', '_replaceRecipeWithAI', '替换失败', error: e);
+      // 关闭加载对话框（使用根导航器）
+      if (mounted) {
+        rootNavigator.pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('替换失败: $e'),
@@ -793,16 +841,17 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
 
   /// 从列表选择替换菜品
   Future<void> _replaceRecipeFromList(
-    BuildContext context,
+    BuildContext dialogContext,  // 重命名：明确这是对话框上下文
     DayPlanModel day,
     MealModel meal,
     int recipeIndex,
     RecipeModel newRecipe,
   ) async {
-    final repository = ref.read(mealPlanRepositoryProvider);
+    logger.info('MenuScreen', '_replaceRecipeFromList', '开始替换菜品',
+        data: {'recipeId': newRecipe.id, 'recipeName': newRecipe.name});
 
-    await repository.replaceRecipeInMeal(
-      familyId: widget.plan.familyId,
+    // 通过 Provider 操作（不自动同步购物清单）
+    await ref.read(menuGenerateProvider.notifier).replaceRecipeFromList(
       date: day.date,
       mealType: meal.type,
       recipeIndex: recipeIndex,
@@ -811,16 +860,73 @@ class _PlanDetailSheetState extends ConsumerState<_PlanDetailSheet> {
     );
 
     ref.read(menuListProvider.notifier).loadPlans();
+    // 同步刷新推荐页数据
+    ref.invalidate(recommendProvider);
 
-    if (context.mounted) {
-      Navigator.pop(context); // 关闭选择对话框
-      Navigator.pop(context); // 关闭详情弹窗
+    // 先关闭选择对话框（使用对话框上下文）
+    if (dialogContext.mounted) {
+      Navigator.pop(dialogContext);
+      logger.log(page: 'MenuScreen', action: '_replaceRecipeFromList', message: '已关闭选择对话框', level: LogLevel.debug);
+    }
+
+    // 后续操作使用 this.context（底部弹窗上下文，State 的 context）
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('已替换为"${newRecipe.name}"'),
           behavior: SnackBarBehavior.floating,
         ),
       );
+      // 弹窗询问是否同步购物清单
+      await _showSyncShoppingListDialog(context, widget.plan.familyId);
+      // 最后关闭详情弹窗
+      if (mounted) {
+        Navigator.pop(context);
+        logger.log(page: 'MenuScreen', action: '_replaceRecipeFromList', message: '已关闭详情弹窗', level: LogLevel.debug);
+      }
+    }
+
+    logger.info('MenuScreen', '_replaceRecipeFromList', '替换完成');
+  }
+
+  /// 询问是否同步购物清单
+  Future<void> _showSyncShoppingListDialog(BuildContext ctx, String familyId) async {
+    logger.log(page: 'MenuScreen', action: '_showSyncShoppingListDialog', message: '检查是否需要同步', level: LogLevel.debug);
+    final plan = ref.read(mealPlanRepositoryProvider).getCurrentMealPlan(familyId);
+    // 如果没有关联的购物清单，不显示弹窗
+    if (plan?.shoppingListId == null) {
+      logger.log(page: 'MenuScreen', action: '_showSyncShoppingListDialog', message: '无关联购物清单，跳过', level: LogLevel.debug);
+      return;
+    }
+
+    logger.info('MenuScreen', '_showSyncShoppingListDialog', '显示同步对话框');
+    final shouldSync = await showDialog<bool>(
+      context: ctx,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('同步购物清单'),
+        content: const Text('菜品已变更，是否同步更新购物清单？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('稍后'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: const Text('立即同步'),
+          ),
+        ],
+      ),
+    );
+
+    logger.log(page: 'MenuScreen', action: '_showSyncShoppingListDialog', message: '用户选择', level: LogLevel.debug, data: {'shouldSync': shouldSync});
+    if (shouldSync == true && ctx.mounted) {
+      await ref.read(menuGenerateProvider.notifier).syncShoppingList(familyId);
+      logger.info('MenuScreen', '_showSyncShoppingListDialog', '购物清单同步完成');
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          const SnackBar(content: Text('购物清单已同步'), behavior: SnackBarBehavior.floating),
+        );
+      }
     }
   }
 
