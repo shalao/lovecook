@@ -206,7 +206,8 @@ class ShoppingListRepository {
     if (list != null) {
       final item = list.items.firstWhere((i) => i.id == itemId);
       item.togglePurchased();
-      await list.save();
+      // 使用 put 而不是 save，确保嵌套对象的修改被正确保存
+      await _storage.shoppingListsBox.put(shoppingListId, list);
     }
   }
 
@@ -217,7 +218,8 @@ class ShoppingListRepository {
       for (final item in list.items) {
         item.purchased = true;
       }
-      await list.save();
+      // 使用 put 而不是 save，确保嵌套对象的修改被正确保存
+      await _storage.shoppingListsBox.put(shoppingListId, list);
     }
   }
 
@@ -228,7 +230,8 @@ class ShoppingListRepository {
       for (final item in list.items) {
         item.purchased = false;
       }
-      await list.save();
+      // 使用 put 而不是 save，确保嵌套对象的修改被正确保存
+      await _storage.shoppingListsBox.put(shoppingListId, list);
     }
   }
 

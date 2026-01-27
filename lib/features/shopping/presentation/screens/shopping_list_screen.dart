@@ -721,27 +721,29 @@ class _ShoppingListContentState extends State<_ShoppingListContent> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                SegmentedButton<ShoppingListGroupMode>(
-                  segments: const [
-                    ButtonSegment(
-                      value: ShoppingListGroupMode.urgency,
-                      label: Text('按紧急度'),
-                      icon: Icon(Icons.schedule, size: 16),
+                Expanded(
+                  child: SegmentedButton<ShoppingListGroupMode>(
+                    segments: const [
+                      ButtonSegment(
+                        value: ShoppingListGroupMode.urgency,
+                        label: Text('按紧急度'),
+                        icon: Icon(Icons.schedule, size: 16),
+                      ),
+                      ButtonSegment(
+                        value: ShoppingListGroupMode.category,
+                        label: Text('按类别'),
+                        icon: Icon(Icons.category, size: 16),
+                      ),
+                    ],
+                    selected: {_groupMode},
+                    onSelectionChanged: (newSelection) {
+                      setState(() {
+                        _groupMode = newSelection.first;
+                      });
+                    },
+                    style: ButtonStyle(
+                      visualDensity: VisualDensity.compact,
                     ),
-                    ButtonSegment(
-                      value: ShoppingListGroupMode.category,
-                      label: Text('按类别'),
-                      icon: Icon(Icons.category, size: 16),
-                    ),
-                  ],
-                  selected: {_groupMode},
-                  onSelectionChanged: (newSelection) {
-                    setState(() {
-                      _groupMode = newSelection.first;
-                    });
-                  },
-                  style: ButtonStyle(
-                    visualDensity: VisualDensity.compact,
                   ),
                 ),
               ],
