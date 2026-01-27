@@ -190,7 +190,7 @@ class _ShoppingListTab extends ConsumerWidget {
     );
   }
 
-  /// 底部操作栏（全选/入库）
+  /// 底部操作栏（全选/删除/入库）
   Widget _buildBottomActionBar(
     BuildContext context,
     WidgetRef ref,
@@ -242,12 +242,24 @@ class _ShoppingListTab extends ConsumerWidget {
           // 已选提示
           Expanded(
             child: Text(
-              hasPurchased ? '${purchasedItems.length} 项已选' : '请选择要入库的食材',
+              hasPurchased ? '${purchasedItems.length} 项已选' : '请选择要操作的食材',
               style: TextStyle(
                 color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
               ),
             ),
           ),
+          // 删除按钮
+          IconButton(
+            onPressed: hasPurchased
+                ? () => _confirmBatchDeleteItems(context, ref, purchasedItems, list)
+                : null,
+            icon: Icon(
+              Icons.delete_outline,
+              color: hasPurchased ? Colors.red : (isDark ? Colors.grey[600] : Colors.grey[400]),
+            ),
+            tooltip: '删除选中项',
+          ),
+          const SizedBox(width: 8),
           // 入库按钮
           ElevatedButton.icon(
             onPressed: hasPurchased
@@ -265,6 +277,71 @@ class _ShoppingListTab extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// 确认批量删除购物清单项
+  void _confirmBatchDeleteItems(
+    BuildContext context,
+    WidgetRef ref,
+    List<ShoppingItemModel> items,
+    ShoppingListModel shoppingList,
+  ) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('确认删除'),
+        content: Text('确定要删除选中的 ${items.length} 项吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await _batchDeleteItems(context, ref, items, shoppingList);
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 批量删除购物清单项
+  Future<void> _batchDeleteItems(
+    BuildContext context,
+    WidgetRef ref,
+    List<ShoppingItemModel> items,
+    ShoppingListModel shoppingList,
+  ) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final shoppingRepo = ref.read(shoppingListRepositoryProvider);
+
+    try {
+      for (final item in items) {
+        await shoppingRepo.removeItem(shoppingList.id, item.id);
+      }
+
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('已删除 ${items.length} 项'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      ref.invalidate(familyShoppingListsProvider(familyId));
+    } catch (e) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('删除失败: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      ref.invalidate(familyShoppingListsProvider(familyId));
+    }
   }
 
   /// 显示入库确认对话框（支持多选）
@@ -479,13 +556,103 @@ class _ShoppingListTab extends ConsumerWidget {
 }
 
 /// 家中库存 Tab
-class _InventoryTab extends ConsumerWidget {
+class _InventoryTab extends ConsumerStatefulWidget {
   final String familyId;
 
   const _InventoryTab({required this.familyId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_InventoryTab> createState() => _InventoryTabState();
+}
+
+class _InventoryTabState extends ConsumerState<_InventoryTab> {
+  bool _isSelectionMode = false;
+  final Set<String> _selectedIds = {};
+
+  void _toggleSelectionMode() {
+    setState(() {
+      _isSelectionMode = !_isSelectionMode;
+      if (!_isSelectionMode) {
+        _selectedIds.clear();
+      }
+    });
+  }
+
+  void _toggleItemSelection(String id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  void _selectAll(List<IngredientModel> ingredients) {
+    setState(() {
+      _selectedIds.addAll(ingredients.map((e) => e.id));
+    });
+  }
+
+  void _deselectAll() {
+    setState(() {
+      _selectedIds.clear();
+    });
+  }
+
+  Future<void> _confirmBatchDelete(BuildContext context) async {
+    final count = _selectedIds.length;
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('确认删除'),
+        content: Text('确定要删除选中的 $count 项食材吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final notifier = ref.read(inventoryProvider.notifier);
+        for (final id in _selectedIds.toList()) {
+          await notifier.deleteIngredient(id);
+        }
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('已删除 $count 项食材'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() {
+          _selectedIds.clear();
+          _isSelectionMode = false;
+        });
+      } catch (e) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('删除失败: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final inventoryState = ref.watch(inventoryProvider);
     final ingredients = inventoryState.ingredients;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -532,6 +699,9 @@ class _InventoryTab extends ConsumerWidget {
       grouped.putIfAbsent(category, () => []).add(ing);
     }
 
+    final allSelected = _selectedIds.length == ingredients.length;
+    final hasSelection = _selectedIds.isNotEmpty;
+
     return Column(
       children: [
         // 头部信息
@@ -541,7 +711,7 @@ class _InventoryTab extends ConsumerWidget {
             color: Theme.of(context).colorScheme.surface,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withAlpha(13),
+                color: Colors.black.withAlpha(isDark ? 40 : 13),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -562,11 +732,21 @@ class _InventoryTab extends ConsumerWidget {
                 ),
               ),
               const Spacer(),
-              TextButton.icon(
-                onPressed: () => context.push(AppRoutes.addIngredient),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('添加'),
-              ),
+              if (!_isSelectionMode) ...[
+                TextButton.icon(
+                  onPressed: () => context.push(AppRoutes.addIngredient),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('添加'),
+                ),
+                TextButton(
+                  onPressed: _toggleSelectionMode,
+                  child: const Text('编辑'),
+                ),
+              ] else
+                TextButton(
+                  onPressed: _toggleSelectionMode,
+                  child: const Text('完成'),
+                ),
             ],
           ),
         ),
@@ -583,6 +763,9 @@ class _InventoryTab extends ConsumerWidget {
               return _InventoryCategory(
                 category: category,
                 items: items,
+                isSelectionMode: _isSelectionMode,
+                selectedIds: _selectedIds,
+                onToggleSelection: _toggleItemSelection,
                 onDelete: (id) {
                   ref.read(inventoryProvider.notifier).deleteIngredient(id);
                 },
@@ -590,6 +773,69 @@ class _InventoryTab extends ConsumerWidget {
             },
           ),
         ),
+
+        // 选择模式下的底部操作栏
+        if (_isSelectionMode)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(isDark ? 40 : 13),
+                  blurRadius: 4,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                // 全选/取消全选按钮
+                OutlinedButton.icon(
+                  onPressed: () {
+                    if (allSelected) {
+                      _deselectAll();
+                    } else {
+                      _selectAll(ingredients);
+                    }
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: isDark ? AppColors.textPrimaryDark : AppColors.textPrimary,
+                    side: BorderSide(
+                      color: isDark ? AppColors.borderDark : AppColors.border,
+                    ),
+                  ),
+                  icon: Icon(
+                    allSelected ? Icons.deselect : Icons.select_all,
+                    size: 18,
+                  ),
+                  label: Text(allSelected ? '取消全选' : '全选'),
+                ),
+                const SizedBox(width: 12),
+                // 已选提示
+                Expanded(
+                  child: Text(
+                    hasSelection ? '${_selectedIds.length} 项已选' : '请选择要删除的食材',
+                    style: TextStyle(
+                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+                // 删除按钮
+                ElevatedButton.icon(
+                  onPressed: hasSelection ? () => _confirmBatchDelete(context) : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: isDark ? Colors.grey[700] : Colors.grey[300],
+                    disabledForegroundColor: isDark ? Colors.grey[500] : Colors.grey[500],
+                  ),
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: const Text('删除'),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -598,12 +844,18 @@ class _InventoryTab extends ConsumerWidget {
 class _InventoryCategory extends StatelessWidget {
   final String category;
   final List<IngredientModel> items;
+  final bool isSelectionMode;
+  final Set<String> selectedIds;
+  final Function(String) onToggleSelection;
   final Function(String) onDelete;
 
   const _InventoryCategory({
     required this.category,
     required this.items,
     required this.onDelete,
+    this.isSelectionMode = false,
+    this.selectedIds = const {},
+    required this.onToggleSelection,
   });
 
   @override
@@ -658,6 +910,7 @@ class _InventoryCategory extends StatelessWidget {
               final index = entry.key;
               final item = entry.value;
               final isLast = index == items.length - 1;
+              final isSelected = selectedIds.contains(item.id);
 
               return Container(
                 decoration: BoxDecoration(
@@ -668,6 +921,13 @@ class _InventoryCategory extends StatelessWidget {
                         ),
                 ),
                 child: ListTile(
+                  leading: isSelectionMode
+                      ? Checkbox(
+                          value: isSelected,
+                          onChanged: (_) => onToggleSelection(item.id),
+                          activeColor: AppColors.primary,
+                        )
+                      : null,
                   title: Text(
                     item.name,
                     style: TextStyle(
@@ -684,19 +944,22 @@ class _InventoryCategory extends StatelessWidget {
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: Icon(
-                          Icons.close,
-                          size: 18,
-                          color: isDark ? AppColors.textTertiaryDark : Colors.grey[400],
+                      if (!isSelectionMode) ...[
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: Icon(
+                            Icons.close,
+                            size: 18,
+                            color: isDark ? AppColors.textTertiaryDark : Colors.grey[400],
+                          ),
+                          onPressed: () => _confirmDelete(context, item),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
                         ),
-                        onPressed: () => _confirmDelete(context, item),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
+                      ],
                     ],
                   ),
+                  onTap: isSelectionMode ? () => onToggleSelection(item.id) : null,
                 ),
               );
             }).toList(),
