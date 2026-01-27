@@ -1,6 +1,9 @@
 import 'package:hive/hive.dart';
+import 'package:uuid/uuid.dart';
 
 part 'shopping_list_model.g.dart';
+
+const _uuid = Uuid();
 
 @HiveType(typeId: 40)
 class ShoppingListModel extends HiveObject {
@@ -37,7 +40,7 @@ class ShoppingListModel extends HiveObject {
     List<ShoppingItemModel>? items,
   }) {
     return ShoppingListModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: _uuid.v4(),  // 使用 UUID 确保唯一性
       familyId: familyId,
       mealPlanId: mealPlanId,
       items: items ?? [],
@@ -215,7 +218,7 @@ class ShoppingItemModel {
     List<IngredientUsage>? usages,
   }) {
     return ShoppingItemModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: _uuid.v4(),  // 使用 UUID 确保唯一性，避免循环中创建重复 ID
       category: category,
       name: name,
       quantity: quantity,
