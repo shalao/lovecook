@@ -292,11 +292,15 @@ class _ShoppingListTab extends ConsumerWidget {
     List<ShoppingItemModel> items,
     ShoppingListModel shoppingList,
   ) async {
+    // 提前保存引用，避免 async 操作后 context 失效导致 Navigator locked 错误
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     // 显示加载对话框
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const AlertDialog(
+      builder: (ctx) => const AlertDialog(
         content: Row(
           children: [
             CircularProgressIndicator(),
@@ -310,10 +314,10 @@ class _ShoppingListTab extends ConsumerWidget {
     try {
       final inventoryNotifier = ref.read(inventoryProvider.notifier);
       final shoppingRepo = ref.read(shoppingListRepositoryProvider);
-      int successCount = 0;
 
+      // 1. 批量准备所有食材（避免循环中重复调用 loadIngredients 导致竞态条件）
+      final ingredients = <IngredientModel>[];
       for (final item in items) {
-        // 转换购物项为食材模型
         final ingredient = IngredientModel.create(
           familyId: familyId,
           name: item.name,
@@ -321,40 +325,42 @@ class _ShoppingListTab extends ConsumerWidget {
           quantity: item.quantity,
           unit: item.unit,
           source: 'shopping',
-          // 根据类别推荐保质期
           expiryDate: _getDefaultExpiryDate(item.category ?? '其他'),
         );
+        ingredients.add(ingredient);
+      }
 
-        await inventoryNotifier.addIngredient(ingredient);
+      // 2. 批量添加到库存（只调用一次 loadIngredients）
+      await inventoryNotifier.addIngredients(ingredients);
 
-        // 从购物清单移除已入库的项目
+      // 3. 批量从购物清单移除
+      for (final item in items) {
         await shoppingRepo.removeItem(shoppingList.id, item.id);
-        successCount++;
       }
 
-      if (context.mounted) {
-        Navigator.pop(context); // 关闭加载对话框
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('成功将 $successCount 项食材添加到库存'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      final successCount = items.length;
 
-      // 刷新购物清单（必须在 Navigator.pop 之后，避免 Navigator locked 错误）
+      // 使用保存的引用关闭对话框，避免 Navigator locked 错误
+      navigator.pop();
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('成功将 $successCount 项食材添加到库存'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      // 刷新购物清单
       ref.invalidate(familyShoppingListsProvider(familyId));
     } catch (e) {
-      if (context.mounted) {
-        Navigator.pop(context); // 关闭加载对话框
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('添加失败: $e'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      // 使用保存的引用关闭对话框
+      navigator.pop();
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('添加失败: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       // 即使失败也刷新，确保 UI 状态一致
       ref.invalidate(familyShoppingListsProvider(familyId));
     }
