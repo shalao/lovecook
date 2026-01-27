@@ -16,5 +16,5 @@ echo "按 Ctrl+C 停止应用"
 echo "-----------------------------------"
 
 # 运行 Flutter 并同时输出到终端和日志文件
-#flutter run -d chrome 2>&1 | tee "$LOG_FILE"
-NO_PROXY=localhost,127.0.0.1 flutter run -d chrome 2>&1 | tee "$LOG_FILE"
+# 使用固定端口 3000，确保 IndexedDB 数据在重启后保持持久化
+NO_PROXY=localhost,127.0.0.1 flutter run -d chrome --web-port=3000 2>&1 | tee "$LOG_FILE"
