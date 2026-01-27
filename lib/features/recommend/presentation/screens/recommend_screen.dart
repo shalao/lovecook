@@ -141,7 +141,6 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
   /// 已确认菜单视图
   Widget _buildConfirmedView(RecommendState state) {
     final selectedDayPlan = state.selectedDayPlan;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
       children: [
@@ -208,8 +207,6 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
   /// 日期导航器
   Widget _buildDateNavigator(RecommendState state) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
 
     // 获取有效的日期范围
     final dayPlans = state.confirmedDayPlans;
@@ -234,13 +231,10 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
           final isSelected = state.selectedDate.year == dayPlan.date.year &&
               state.selectedDate.month == dayPlan.date.month &&
               state.selectedDate.day == dayPlan.date.day;
-          final isToday = dayPlan.date.year == today.year &&
-              dayPlan.date.month == today.month &&
-              dayPlan.date.day == today.day;
 
           return GestureDetector(
             onTap: () {
-              ref.read(recommendProvider.notifier).selectDate(dayPlan.date);
+              ref.read(recommendProvider.notifier).selectDate(dayPlan.date, index: index);
             },
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -511,8 +505,12 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
         children: [
           Expanded(
             child: OutlinedButton.icon(
-              onPressed: () {
-                context.push(AppRoutes.menu);
+              onPressed: () async {
+                await context.push(AppRoutes.menu);
+                // 使用 invalidate 强制重建 Provider，确保数据完全刷新
+                if (mounted) {
+                  ref.invalidate(recommendProvider);
+                }
               },
               icon: const Icon(Icons.edit_outlined, size: 18),
               label: const Text('调整菜单'),
@@ -562,7 +560,7 @@ class _RecommendScreenState extends ConsumerState<RecommendScreen> {
                 }
               },
               icon: const Icon(Icons.shopping_cart_outlined, size: 18),
-              label: const Text('生成清单'),
+              label: const Text('生成购物清单'),
             ),
           ),
           const SizedBox(width: 12),
