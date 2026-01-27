@@ -19,10 +19,11 @@ class MealPlanRepository {
 
   /// 根据 ID 获取菜单计划
   MealPlanModel? getMealPlanById(String id) {
-    return _storage.mealPlansBox.values.firstWhere(
-      (m) => m.id == id,
-      orElse: () => throw Exception('MealPlan not found'),
-    );
+    try {
+      return _storage.mealPlansBox.values.firstWhere((m) => m.id == id);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// 保存菜单计划
@@ -486,6 +487,70 @@ class MealPlanRepository {
         .where((m) => m.familyId == familyId && m.startDate.isAfter(today))
         .toList()
       ..sort((a, b) => a.startDate.compareTo(b.startDate));
+  }
+
+  /// 从菜单中移除指定菜谱（用于标记已吃后清理推荐）
+  /// [recipeId] - 菜谱ID
+  /// [date] - 可选，限定日期（null则搜索所有日期）
+  /// [mealType] - 可选，限定餐次（null则搜索所有餐次）
+  Future<bool> removeRecipeFromPlan({
+    required String familyId,
+    required String recipeId,
+    DateTime? date,
+    String? mealType,
+  }) async {
+    bool removed = false;
+    final normalizedDate = date != null
+        ? DateTime(date.year, date.month, date.day)
+        : null;
+
+    for (final plan in _storage.mealPlansBox.values) {
+      if (plan.familyId != familyId) continue;
+
+      for (final dayPlan in plan.days) {
+        // 如果指定了日期，检查日期是否匹配
+        if (normalizedDate != null &&
+            (dayPlan.date.year != normalizedDate.year ||
+             dayPlan.date.month != normalizedDate.month ||
+             dayPlan.date.day != normalizedDate.day)) {
+          continue;
+        }
+
+        for (final meal in dayPlan.meals) {
+          // 如果指定了餐次，检查餐次是否匹配
+          if (mealType != null &&
+              meal.type.toLowerCase() != mealType.toLowerCase()) {
+            continue;
+          }
+
+          final index = meal.recipeIds.indexOf(recipeId);
+          if (index >= 0) {
+            meal.recipeIds.removeAt(index);
+            // 同步更新 notes
+            if (meal.notes != null) {
+              final names = meal.notes!.split('、');
+              if (index < names.length) {
+                names.removeAt(index);
+                // 由于 MealModel 的 notes 是 final，需要重建
+                final mealIndex = dayPlan.meals.indexOf(meal);
+                dayPlan.meals[mealIndex] = MealModel(
+                  type: meal.type,
+                  recipeIds: meal.recipeIds,
+                  notes: names.isEmpty ? null : names.join('、'),
+                );
+              }
+            }
+            removed = true;
+          }
+        }
+      }
+
+      if (removed) {
+        await plan.save();
+      }
+    }
+
+    return removed;
   }
 }
 

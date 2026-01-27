@@ -315,13 +315,34 @@ class MenuGenerateNotifier extends StateNotifier<MenuGenerateState> {
         newRecipeName: newRecipe.name,
       );
 
-      // v1.2: 同步购物清单
-      await _syncShoppingList(family.id);
+      // v1.2: 购物清单同步改由 UI 确认后调用 syncShoppingList()
     } on AIServiceException catch (e) {
       // 生成失败，向上抛出异常让 UI 处理
       debugPrint('替换菜品失败: ${e.message}');
       rethrow;
     }
+  }
+
+  /// 从已有菜谱列表替换菜品（不自动同步购物清单，由 UI 确认后调用 syncShoppingList）
+  Future<void> replaceRecipeFromList({
+    required DateTime date,
+    required String mealType,
+    required int recipeIndex,
+    required String newRecipeId,
+    required String newRecipeName,
+  }) async {
+    final family = _currentFamily;
+    if (family == null) return;
+
+    // 只更新菜单，不自动同步购物清单
+    await _repository.replaceRecipeInMeal(
+      familyId: family.id,
+      date: date,
+      mealType: mealType,
+      recipeIndex: recipeIndex,
+      newRecipeId: newRecipeId,
+      newRecipeName: newRecipeName,
+    );
   }
 
   /// 删除指定菜品
@@ -340,8 +361,7 @@ class MenuGenerateNotifier extends StateNotifier<MenuGenerateState> {
       recipeIndex: recipeIndex,
     );
 
-    // v1.2: 同步购物清单
-    await _syncShoppingList(family.id);
+    // v1.2: 购物清单同步改由 UI 确认后调用 syncShoppingList()
   }
 
   /// 删除指定日期的餐次
@@ -358,33 +378,41 @@ class MenuGenerateNotifier extends StateNotifier<MenuGenerateState> {
       mealTypes: mealTypes,
     );
 
-    // v1.2: 同步购物清单
-    await _syncShoppingList(family.id);
+    // v1.2: 购物清单同步改由 UI 确认后调用 syncShoppingList()
   }
 
-  /// v1.2: 同步购物清单（当菜品变化时调用）
+  /// 公开的同步购物清单方法（供 UI 在用户确认后调用）
+  Future<void> syncShoppingList(String familyId) async {
+    await _syncShoppingList(familyId);
+  }
+
+  /// v1.2: 同步购物清单（当菜品变化时调用，使用带日期版本）
   Future<void> _syncShoppingList(String familyId) async {
     // 获取当前菜单
     final plan = _repository.getCurrentMealPlan(familyId);
     if (plan == null || plan.shoppingListId == null) return;
 
-    // 收集所有菜谱
-    final recipes = <RecipeModel>[];
+    // 收集所有带日期信息的菜谱
+    final recipesWithDates = <RecipeWithDateInfo>[];
     for (final day in plan.days) {
       for (final meal in day.meals) {
         for (final recipeId in meal.recipeIds) {
           final recipe = _recipeRepository.getRecipeById(recipeId);
           if (recipe != null) {
-            recipes.add(recipe);
+            recipesWithDates.add(RecipeWithDateInfo(
+              recipe: recipe,
+              date: day.date,
+              mealType: meal.type,
+            ));
           }
         }
       }
     }
 
-    // 更新购物清单
-    await _shoppingListRepository.updateShoppingListItems(
+    // 更新购物清单（带日期和用量追踪）
+    await _shoppingListRepository.updateShoppingListItemsWithDates(
       shoppingListId: plan.shoppingListId!,
-      recipes: recipes,
+      recipesWithDates: recipesWithDates,
       inventory: _inventory,
     );
   }

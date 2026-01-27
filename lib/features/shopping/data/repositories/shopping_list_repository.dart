@@ -21,10 +21,11 @@ class ShoppingListRepository {
 
   /// 根据 ID 获取购物清单
   ShoppingListModel? getShoppingListById(String id) {
-    return _storage.shoppingListsBox.values.firstWhere(
-      (s) => s.id == id,
-      orElse: () => throw Exception('ShoppingList not found'),
-    );
+    try {
+      return _storage.shoppingListsBox.values.firstWhere((s) => s.id == id);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// 保存购物清单
@@ -187,7 +188,8 @@ class ShoppingListRepository {
     final list = getShoppingListById(shoppingListId);
     if (list != null) {
       list.addItem(item);
-      await list.save();
+      // 使用 put 而不是 save，确保嵌套对象的修改被正确保存
+      await _storage.shoppingListsBox.put(shoppingListId, list);
     }
   }
 
@@ -196,7 +198,8 @@ class ShoppingListRepository {
     final list = getShoppingListById(shoppingListId);
     if (list != null) {
       list.removeItem(itemId);
-      await list.save();
+      // 使用 put 而不是 save，确保嵌套对象的修改被正确保存
+      await _storage.shoppingListsBox.put(shoppingListId, list);
     }
   }
 
@@ -204,8 +207,9 @@ class ShoppingListRepository {
   Future<void> toggleItemPurchased(String shoppingListId, String itemId) async {
     final list = getShoppingListById(shoppingListId);
     if (list != null) {
-      final item = list.items.firstWhere((i) => i.id == itemId);
-      item.togglePurchased();
+      final index = list.items.indexWhere((i) => i.id == itemId);
+      if (index < 0) return; // 未找到则跳过
+      list.items[index].togglePurchased();
       // 使用 put 而不是 save，确保嵌套对象的修改被正确保存
       await _storage.shoppingListsBox.put(shoppingListId, list);
     }
@@ -311,7 +315,8 @@ class ShoppingListRepository {
     // 更新购物清单
     list.items.clear();
     list.items.addAll(newItems);
-    await list.save();
+    // 使用 put 而不是 save，确保嵌套对象的修改被正确保存
+    await _storage.shoppingListsBox.put(shoppingListId, list);
   }
 
   /// 更新购物清单内容（带日期和用量追踪）
@@ -400,7 +405,8 @@ class ShoppingListRepository {
     // 更新购物清单
     list.items.clear();
     list.items.addAll(newItems);
-    await list.save();
+    // 使用 put 而不是 save，确保嵌套对象的修改被正确保存
+    await _storage.shoppingListsBox.put(shoppingListId, list);
   }
 
   /// 根据食材名称猜测类别

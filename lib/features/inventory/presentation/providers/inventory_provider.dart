@@ -47,6 +47,7 @@ class InventoryState {
 
   /// 按类别分组的食材
   Map<String, List<IngredientModel>> get groupedByCategory {
+    // 不过滤零库存，但在每个分类内按数量排序（有库存的在前）
     final filtered = selectedCategory == null
         ? ingredients
         : ingredients.where((i) => i.category == selectedCategory).toList();
@@ -63,6 +64,18 @@ class InventoryState {
       final category = ing.category ?? '其他';
       grouped.putIfAbsent(category, () => []).add(ing);
     }
+
+    // 每个分类内按数量排序：有库存的在前，零库存的在后
+    for (final category in grouped.keys) {
+      grouped[category]!.sort((a, b) {
+        // 有库存的排在前面
+        if (a.quantity > 0 && b.quantity <= 0) return -1;
+        if (a.quantity <= 0 && b.quantity > 0) return 1;
+        // 同类内按名称排序
+        return a.name.compareTo(b.name);
+      });
+    }
+
     return grouped;
   }
 
